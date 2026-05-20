@@ -168,7 +168,7 @@ var Signatures = []SignatureDef{
 		[]string{".htaccess"}},
 	{"SV-002", HIGH, "server",
 		".htaccess allowing PHP execution in upload dirs",
-		`(?i)(?:AddHandler|AddType)[\s\S]{0,50}(?:php|phtml|application/x-httpd)`,
+		`(?i)^\s*(?:AddHandler|AddType)[\s\S]{0,50}(?:php|phtml|application/x-httpd)`,
 		[]string{".htaccess"}},
 	{"SV-003", CRITICAL, "server",
 		"Cron job malware (persistent backdoor)",
@@ -558,6 +558,9 @@ var WhitelistPaths = []string{
 	"vendor/web-token",
 	"vendor/aws",
 	"vendor/m2e",
+	"vendor/dotmailer",
+	"vendor/hoa",
+	"vendor/jms",
 	// Magento static/frontend build tooling
 	"lib/web/jquery",
 	"lib/web/knockoutjs",

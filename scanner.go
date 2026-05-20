@@ -215,6 +215,8 @@ func isLegitImagePath(rel string) bool {
 		"media/.thumbs",
 		"pub/media/blog/",
 		"media/blog/",
+		"pub/media/contactattachment/",
+		"media/contactattachment/",
 		"wp-content/uploads/",
 		"img/",
 		"images/",
