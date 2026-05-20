@@ -322,8 +322,8 @@ var LogExploitPatterns = []LogExploitPatternDef{
 		`(?i)(?:methodCall|system\.listMethods|admin\.login)`},
 	{"LOG-011", CRITICAL, "log_exploit",
 		"Remote code execution via layout XML (CVE-2024-20720)",
-		`(?i)(?:POST|GET)\s+\S*`,
-		`(?i)(?:layout_update|<block.*class=|ObjectManager|Interceptor)`},
+		`(?i)(?:POST|GET)\s+\S*(?:admin|cms_block|catalog_product|layout_update)`,
+		`(?i)(?:layout_update|<block.*class=|ObjectManager::)`},
 	{"LOG-012", HIGH, "log_exploit",
 		"Unauthorized API token creation attempt",
 		`(?i)POST\s+\S*rest/V1/integration/(?:admin|customer)/token`,
@@ -561,6 +561,8 @@ var WhitelistPaths = []string{
 	"vendor/dotmailer",
 	"vendor/hoa",
 	"vendor/jms",
+	"vendor/mikey179",
+	"vendor/vertex",
 	// Magento static/frontend build tooling
 	"lib/web/jquery",
 	"lib/web/knockoutjs",
@@ -577,6 +579,8 @@ var WhitelistPaths = []string{
 	// WeltPixel (legitimate license check with hex strings)
 	"app/code/WeltPixel/Backend/",
 	// Magento pub (legitimate PHP entry points)
+	"pub/.htaccess",
+	"pub/media/.htaccess",
 	"pub/index.php",
 	"pub/cron.php",
 	"pub/get.php",
