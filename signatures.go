@@ -82,6 +82,18 @@ var Signatures = []SignatureDef{
 		"Suspicious file_put_contents with user input",
 		`(?i)file_put_contents\s*\([\s\S]{0,200}\$_(?:GET|POST|REQUEST|COOKIE)`,
 		[]string{".php", ".phtml"}},
+	{"BD-013", CRITICAL, "backdoor",
+		"Dangerous callback via call_user_func",
+		`(?i)call_user_func(?:_array)?\s*\([\s\S]{0,100}(?:eval|assert|system|exec|passthru|shell_exec|base64_decode|\$_(?:GET|POST|REQUEST|COOKIE))`,
+		[]string{".php", ".phtml"}},
+	{"BD-014", CRITICAL, "backdoor",
+		"Dangerous callback via array function",
+		`(?i)(?:array_map|array_filter|array_walk|usort|uasort|uksort|array_reduce)\s*\([\s\S]{0,100}(?:eval|assert|system|exec|passthru|shell_exec|base64_decode|\$_(?:GET|POST|REQUEST|COOKIE))`,
+		[]string{".php", ".phtml"}},
+	{"BD-015", HIGH, "backdoor",
+		"User input used as function name (indirect call)",
+		`(?i)\$_(?:GET|POST|REQUEST|COOKIE)\s*\[[\s\S]{0,30}\]\s*\(`,
+		[]string{".php", ".phtml"}},
 
 	// ━━━ Obfuscation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	{"OB-001", HIGH, "obfuscation",
@@ -112,6 +124,10 @@ var Signatures = []SignatureDef{
 		"ionCube/Zend Guard encoded file - verify legitimacy",
 		`(?i)(?:ionCube|ioncube_loader|zend_loader|sg_load|SourceGuardian)`,
 		[]string{".php"}},
+	{"OB-008", HIGH, "obfuscation",
+		"Hex decoding via pack() - common obfuscation technique",
+		`(?i)pack\s*\(\s*['"]H\*['"]\s*,`,
+		[]string{".php", ".phtml"}},
 
 	// ━━━ Suspicious File Operations ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	{"FO-001", HIGH, "file_operation",
@@ -185,8 +201,8 @@ var Signatures = []SignatureDef{
 		`(?i)\beval\s*\(`,
 		[]string{".php", ".phtml"}},
 	{"SF-002", INFO, "suspicious",
-		"base64_decode usage (review context)",
-		`(?i)\bbase64_decode\s*\(`,
+		"base64_decode in suspicious context",
+		`(?i)(?:eval|assert|file_put_contents|system|exec|passthru|preg_replace|create_function)\s*\([\s\S]{0,80}base64_decode|base64_decode[\s\S]{0,80}(?:\$_(?:GET|POST|REQUEST|COOKIE)|eval|file_put_contents)`,
 		[]string{".php", ".phtml"}},
 	{"SF-003", INFO, "suspicious",
 		"System command execution functions",
@@ -517,9 +533,18 @@ var SkipDirs = map[string]bool{
 }
 
 var WhitelistPaths = []string{
-	// Test frameworks
+	// Test frameworks & vendor test suites
 	"vendor/phpunit",
+	"vendor/phpspec",
 	"dev/tests",
+	"Test/Unit/",
+	"Test/Integration/",
+	"Tests/Unit/",
+	"Tests/Integration/",
+	"tests/unit/",
+	"tests/integration/",
+	"/test/",
+	"/spec/",
 	// Magento core code generators / compilers
 	"setup/src",
 	"lib/internal/Magento/Framework/Code/Generator",

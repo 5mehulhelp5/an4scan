@@ -49,6 +49,7 @@ type An4Scanner struct {
 	AnalyzeLogs      bool
 	CheckPlugins     bool
 	CheckIntegrity   bool
+	CheckProcesses   bool
 	LogPaths         []string
 	HTMLOutput       string
 	DiffPath         string
@@ -276,7 +277,7 @@ func (s *An4Scanner) scanFile(path string) ([]Finding, []SuspiciousFile) {
 		return findings, suspicious
 	}
 
-	content := string(data)
+	content := stripZeroWidth(string(data))
 	lines := strings.Split(content, "\n")
 
 	// Signature checks
@@ -318,6 +319,22 @@ func (s *An4Scanner) scanFile(path string) ([]Finding, []SuspiciousFile) {
 					LineNumber: i + 1, LineContent: strings.TrimSpace(snippet),
 				})
 			}
+		}
+	}
+
+	// Multi-line pattern check (catches eval split across lines)
+	mlFindings := scanMultiLine(lines, ext, rel)
+	for _, mlf := range mlFindings {
+		key := mlf.FilePath + "|" + mlf.SignatureID
+		dup := false
+		for _, f := range findings {
+			if f.FilePath+"|"+f.SignatureID == key {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			findings = append(findings, mlf)
 		}
 	}
 
@@ -364,6 +381,97 @@ func shannonEntropy(data string) float64 {
 		}
 	}
 	return entropy
+}
+
+func stripZeroWidth(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case 0x200B, 0x200C, 0x200D, 0xFEFF, 0x00AD:
+			return -1
+		}
+		return r
+	}, s)
+}
+
+var multiLinePatterns = []compiledSig{}
+
+func initMultiLinePatterns() []compiledSig {
+	defs := []SignatureDef{
+		{"ML-001", CRITICAL, "backdoor",
+			"Multi-line eval + decode chain",
+			`(?is)eval\s*\(\s*(?:base64_decode|gzinflate|gzuncompress|gzdecode|str_rot13)\s*\(`,
+			[]string{".php", ".phtml"}},
+		{"ML-002", CRITICAL, "backdoor",
+			"Multi-line eval with variable function",
+			`(?is)eval\s*\(\s*\$[a-zA-Z_]\w*\s*\(`,
+			[]string{".php", ".phtml"}},
+		{"ML-003", CRITICAL, "backdoor",
+			"Multi-line dangerous callback",
+			`(?is)(?:call_user_func|array_map|array_filter|usort)\s*\([\s\S]{0,200}(?:eval|system|exec|passthru|shell_exec|base64_decode)`,
+			[]string{".php", ".phtml"}},
+		{"ML-004", CRITICAL, "skimmer",
+			"Multi-line payment form interception",
+			`(?is)(?:payment|checkout|billing)[\s\S]{0,200}addEventListener[\s\S]{0,400}(?:fetch|XMLHttp|Image|sendBeacon)`,
+			[]string{".js", ".phtml"}},
+	}
+	var compiled []compiledSig
+	for _, d := range defs {
+		r, err := regexp.Compile(d.Pattern)
+		if err != nil {
+			continue
+		}
+		exts := make(map[string]bool)
+		for _, e := range d.Extensions {
+			exts[e] = true
+		}
+		compiled = append(compiled, compiledSig{
+			ID: d.ID, Severity: d.Severity, Category: d.Category,
+			Description: d.Description, Regex: r, Extensions: exts,
+		})
+	}
+	return compiled
+}
+
+func scanMultiLine(lines []string, ext, rel string) []Finding {
+	if len(multiLinePatterns) == 0 {
+		multiLinePatterns = initMultiLinePatterns()
+	}
+
+	var findings []Finding
+	windowSize := 5
+
+	for i := 0; i < len(lines); i++ {
+		end := i + windowSize
+		if end > len(lines) {
+			end = len(lines)
+		}
+		window := strings.Join(lines[i:end], "\n")
+		if len(window) > 3000 {
+			window = window[:3000]
+		}
+
+		for _, sig := range multiLinePatterns {
+			if !sig.Extensions[ext] {
+				continue
+			}
+			if sig.Regex.MatchString(window) {
+				snippet := strings.TrimSpace(window)
+				if len(snippet) > 200 {
+					snippet = snippet[:200]
+				}
+				findings = append(findings, Finding{
+					FilePath:    rel,
+					SignatureID: sig.ID,
+					Severity:    sig.Severity,
+					Category:    sig.Category,
+					Description: sig.Description,
+					LineNumber:  i + 1,
+					LineContent: snippet,
+				})
+			}
+		}
+	}
+	return findings
 }
 
 func (s *An4Scanner) Scan() *ScanResult {
@@ -416,6 +524,9 @@ func (s *An4Scanner) Scan() *ScanResult {
 		}
 		if s.CheckIntegrity {
 			modules = append(modules, "INTEGRITY")
+		}
+		if s.CheckProcesses {
+			modules = append(modules, "PROCESSES")
 		}
 		if len(modules) > 0 {
 			fmt.Printf("  Modules:  %s\n", strings.Join(modules, ", "))
@@ -577,6 +688,17 @@ func (s *An4Scanner) Scan() *ScanResult {
 		}
 	}
 
+	// Process scan
+	if s.CheckProcesses {
+		if s.showProgress {
+			fmt.Println("  Scanning running processes...")
+		}
+		result.ProcessFindings = scanProcesses(s.Verbose)
+		if s.showProgress {
+			fmt.Printf("  Processes: %d finding(s)\n\n", len(result.ProcessFindings))
+		}
+	}
+
 	// Log analysis
 	if s.AnalyzeLogs {
 		if s.showProgress {
@@ -672,6 +794,7 @@ func buildSummary(result *ScanResult) ScanSummary {
 	allFindings = append(allFindings, result.LogFindings...)
 	allFindings = append(allFindings, result.CVEFindings...)
 	allFindings = append(allFindings, result.IntegrityFindings...)
+	allFindings = append(allFindings, result.ProcessFindings...)
 
 	for _, f := range allFindings {
 		bySeverity[f.Severity]++
@@ -702,6 +825,7 @@ func buildSummary(result *ScanResult) ScanSummary {
 			"log_analysis": len(result.LogFindings),
 			"cve":          len(result.CVEFindings),
 			"integrity":    len(result.IntegrityFindings),
+			"processes":    len(result.ProcessFindings),
 			"plugins":      len(result.PluginFindings),
 		},
 	}

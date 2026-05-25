@@ -67,6 +67,7 @@ type ScanResult struct {
 	PluginFindings     []PluginFinding   `json:"plugin_findings,omitempty"`
 	IntegrityResult    IntegrityResult   `json:"integrity_result,omitempty"`
 	IntegrityFindings  []Finding         `json:"integrity_findings,omitempty"`
+	ProcessFindings    []Finding         `json:"process_findings,omitempty"`
 	VersionInfo        map[string]string `json:"version_info"`
 	CVEFindings        []Finding         `json:"cve_findings"`
 	Timeline           []TimelineEvent   `json:"timeline"`

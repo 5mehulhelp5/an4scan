@@ -130,6 +130,7 @@ func printTextReport(result *ScanResult) {
 	allFindings = append(allFindings, result.MtimeFindings...)
 	allFindings = append(allFindings, result.IntegrityFindings...)
 	allFindings = append(allFindings, result.YaraFindings...)
+	allFindings = append(allFindings, result.ProcessFindings...)
 	allFindings = append(allFindings, result.LogFindings...)
 
 	if len(allFindings) > 0 {

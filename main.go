@@ -10,17 +10,18 @@ import (
 
 func main() {
 	// Scan modules
-	flagDB := flag.Bool("db", false, "Scan database for injected malware")
-	flagMtime := flag.Bool("mtime", false, "Detect recently modified core files + integrity check")
+	flagDB := flag.Bool("db", true, "Scan database for injected malware")
+	flagMtime := flag.Bool("mtime", true, "Detect recently modified core files + integrity check")
 	flagMtimeDays := flag.Int("mtime-days", 7, "Days window for --mtime")
-	flagPerms := flag.Bool("permissions", false, "Check file permissions (world-writable, SUID/SGID)")
-	flagVersion := flag.Bool("version", false, "Detect Magento version and check known CVEs")
-	flagLogs := flag.Bool("logs", false, "Analyze access logs for exploit attempts")
+	flagPerms := flag.Bool("permissions", true, "Check file permissions (world-writable, SUID/SGID)")
+	flagVersion := flag.Bool("version", true, "Detect Magento version and check known CVEs")
+	flagLogs := flag.Bool("logs", true, "Analyze access logs for exploit attempts")
 	flagLogPath := flag.String("log-path", "", "Comma-separated path(s) to access log files")
-	flagYara := flag.Bool("yara", false, "Enable YARA scanning")
+	flagYara := flag.Bool("yara", true, "Enable YARA scanning")
 	flagYaraRules := flag.String("yara-rules", "", "Path to additional YARA rules file or directory")
-	flagPlugins := flag.Bool("plugins", false, "Scan plugins/modules for known vulnerabilities")
-	flagIntegrity := flag.Bool("integrity", false, "Check core file integrity (WP: uses wordpress.org checksums)")
+	flagPlugins := flag.Bool("plugins", true, "Scan plugins/modules for known vulnerabilities")
+	flagIntegrity := flag.Bool("integrity", true, "Check core file integrity (WP: uses wordpress.org checksums)")
+	flagProcesses := flag.Bool("processes", true, "Scan running processes for malware (reverse shells, miners, rootkits)")
 	flagAll := flag.Bool("all", false, "Enable all scan modules")
 	flagDeep := flag.Bool("deep", false, "Show all findings including suspicions (default: confirmed threats only)")
 
@@ -148,6 +149,7 @@ Flags:
 		*flagLogs = true
 		*flagPlugins = true
 		*flagIntegrity = true
+		*flagProcesses = true
 	}
 
 	// Severity
@@ -200,6 +202,7 @@ Flags:
 	tmpl.LogPaths = logPaths
 	tmpl.CheckPlugins = *flagPlugins
 	tmpl.CheckIntegrity = *flagIntegrity
+	tmpl.CheckProcesses = *flagProcesses
 	tmpl.HTMLOutput = *flagHTML
 	tmpl.DiffPath = *flagDiff
 	tmpl.SaveScan = *flagSave

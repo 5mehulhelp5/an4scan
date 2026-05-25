@@ -147,6 +147,10 @@ func (ds *DatabaseScanner) Scan() []Finding {
 		{prefix + "cms_page", "cms_page", []string{"content", "title", "identifier", "content_heading", "layout_update_xml"}},
 		{prefix + "email_template", "email_template", []string{"template_text", "template_subject"}},
 		{prefix + "sales_order_status_label", "sales_order_status_label", []string{"label"}},
+		{prefix + "newsletter_template", "newsletter_template", []string{"template_text", "template_subject"}},
+		{prefix + "catalog_product_entity_text", "catalog_product_entity_text", []string{"value"}},
+		{prefix + "catalog_category_entity_text", "catalog_category_entity_text", []string{"value"}},
+		{prefix + "translation", "translation", []string{"translate"}},
 	}
 
 	// Check admin users

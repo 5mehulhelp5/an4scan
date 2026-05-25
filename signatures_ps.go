@@ -58,13 +58,9 @@ var PrestaShopSignatures = []SignatureDef{
 		[]string{".php"}},
 
 	// ━━━ PS File Anomalies ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	{"PS-FA-001", HIGH, "suspicious",
-		"PHP file in PrestaShop upload/img directory",
-		`<\?(?:php|=)`,
-		[]string{".php"}},
 	{"PS-FA-002", HIGH, "suspicious",
-		"Suspicious override class (verify legitimacy)",
-		`(?is)class\s+\w+\s+extends\s+\w+Core\b`,
+		"Override class with dangerous functions (verify legitimacy)",
+		`(?is)class\s+\w+\s+extends\s+\w+Core\b[\s\S]{0,500}(?:eval|base64_decode|gzinflate|system|exec|shell_exec|passthru)\s*\(`,
 		[]string{".php"}},
 }
 
