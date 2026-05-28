@@ -19,8 +19,68 @@ type DatabaseScanner struct {
 
 func NewDatabaseScanner(magentoRoot string, verbose bool) *DatabaseScanner {
 	ds := &DatabaseScanner{root: magentoRoot, verbose: verbose}
-	ds.dbConfig = ds.readEnvPHP()
+	ds.dbConfig = ds.readDBConfig()
 	return ds
+}
+
+func (ds *DatabaseScanner) readDBConfig() map[string]string {
+	// Try Magento 2 env.php first
+	if config := ds.readEnvPHP(); config != nil {
+		return config
+	}
+	// Fallback to Magento 1 local.xml
+	return ds.readLocalXML()
+}
+
+func (ds *DatabaseScanner) readLocalXML() map[string]string {
+	xmlPath := filepath.Join(ds.root, "app", "etc", "local.xml")
+	data, err := os.ReadFile(xmlPath)
+	if err != nil {
+		return nil
+	}
+	content := string(data)
+	config := make(map[string]string)
+
+	extract := func(tag string) string {
+		re := regexp.MustCompile(`<` + tag + `><!\[CDATA\[([^\]]*)\]\]><\/` + tag + `>`)
+		m := re.FindStringSubmatch(content)
+		if m != nil {
+			return m[1]
+		}
+		re2 := regexp.MustCompile(`<` + tag + `>([^<]*)<\/` + tag + `>`)
+		m2 := re2.FindStringSubmatch(content)
+		if m2 != nil {
+			return m2[1]
+		}
+		return ""
+	}
+
+	config["host"] = extract("host")
+	config["dbname"] = extract("dbname")
+	config["username"] = extract("username")
+	config["password"] = extract("password")
+
+	prefixRe := regexp.MustCompile(`<table_prefix><!\[CDATA\[([^\]]*)\]\]></table_prefix>`)
+	pm := prefixRe.FindStringSubmatch(content)
+	if pm != nil {
+		config["table_prefix"] = pm[1]
+	} else {
+		prefixRe2 := regexp.MustCompile(`<table_prefix>([^<]*)</table_prefix>`)
+		pm2 := prefixRe2.FindStringSubmatch(content)
+		if pm2 != nil {
+			config["table_prefix"] = pm2[1]
+		} else {
+			config["table_prefix"] = ""
+		}
+	}
+
+	if config["dbname"] == "" {
+		return nil
+	}
+	if config["host"] == "" {
+		return nil
+	}
+	return config
 }
 
 func (ds *DatabaseScanner) readEnvPHP() map[string]string {

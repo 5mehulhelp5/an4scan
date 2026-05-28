@@ -46,7 +46,18 @@ func detectCMS(root string) CMSInfo {
 func detectMagento(root string) CMSInfo {
 	info := CMSInfo{Type: CMSUnknown}
 
-	// Check for Magento markers
+	// Check Magento 1 first (app/Mage.php or app/etc/local.xml)
+	m1Markers := []string{
+		filepath.Join(root, "app", "Mage.php"),
+		filepath.Join(root, "app", "etc", "local.xml"),
+	}
+	for _, m := range m1Markers {
+		if _, err := os.Stat(m); err == nil {
+			return detectMagento1(root)
+		}
+	}
+
+	// Check for Magento 2 markers
 	markers := []string{
 		filepath.Join(root, "bin", "magento"),
 		filepath.Join(root, "app", "etc", "env.php"),
@@ -159,6 +170,42 @@ func detectMagento(root string) CMSInfo {
 	}
 
 	info.EOL = checkMagentoEOL(info.Version)
+	return info
+}
+
+func detectMagento1(root string) CMSInfo {
+	info := CMSInfo{
+		Type:    CMSMagento,
+		Name:    "Magento 1",
+		Edition: "Community",
+	}
+
+	// Version from app/Mage.php
+	magePath := filepath.Join(root, "app", "Mage.php")
+	if data, err := os.ReadFile(magePath); err == nil {
+		content := string(data)
+		major := regexp.MustCompile(`'major'\s*=>\s*'(\d+)'`).FindStringSubmatch(content)
+		minor := regexp.MustCompile(`'minor'\s*=>\s*'(\d+)'`).FindStringSubmatch(content)
+		revision := regexp.MustCompile(`'revision'\s*=>\s*'(\d+)'`).FindStringSubmatch(content)
+		patch := regexp.MustCompile(`'patch'\s*=>\s*'(\d+)'`).FindStringSubmatch(content)
+
+		if major != nil && minor != nil {
+			info.Version = major[1] + "." + minor[1]
+			if revision != nil {
+				info.Version += "." + revision[1]
+			}
+			if patch != nil {
+				info.Version += "." + patch[1]
+			}
+			info.Source = "app/Mage.php"
+		}
+
+		if strings.Contains(content, "Enterprise") {
+			info.Edition = "Enterprise"
+		}
+	}
+
+	info.EOL = "Magento 1 reached EOL in June 2020. Upgrade to Magento 2.4.7+ urgently."
 	return info
 }
 
