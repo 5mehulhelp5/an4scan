@@ -133,6 +133,12 @@ Flags:
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	// Resolve symlinks so WalkDir traverses the real directory
+	scanPath, err = filepath.EvalSymlinks(scanPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error resolving path: %v\n", err)
+		os.Exit(1)
+	}
 	info, err := os.Stat(scanPath)
 	if err != nil || !info.IsDir() {
 		fmt.Fprintf(os.Stderr, "Error: path does not exist or is not a directory: %s\n", scanPath)
