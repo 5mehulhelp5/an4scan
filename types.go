@@ -145,6 +145,17 @@ type CVEDef struct {
 	Patch        string
 }
 
+// MagentoCVEDef uses "fixed in" semantics with one entry per release line,
+// because Adobe backports each fix to several lines (2.4.7-px, 2.4.6-px...).
+// A version is vulnerable if it is below the fix for its own release line.
+type MagentoCVEDef struct {
+	CVEID       string
+	Severity    string
+	Description string
+	Patch       string
+	FixedIn     []string
+}
+
 type YaraRulesetDef struct {
 	Name        string
 	Description string

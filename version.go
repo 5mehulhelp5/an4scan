@@ -34,6 +34,64 @@ func versionLessOrEqual(a, b [4]int) bool {
 	return true // equal
 }
 
+func versionLess(a, b [4]int) bool {
+	for i := 0; i < 4; i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+// magentoVulnerable: a version is vulnerable if it is strictly below the fix
+// for its own release line (2.4.6-p6 matches the 2.4.6 line). Versions on a
+// line older than every patched line never got the fix. Versions newer than
+// every fix shipped with it.
+func magentoVulnerable(current [4]int, fixedIn []string) bool {
+	var lowest [4]int
+	hasLowest := false
+	for _, f := range fixedIn {
+		fixed := parseVersionTuple(f)
+		if fixed[0] == current[0] && fixed[1] == current[1] && fixed[2] == current[2] {
+			return versionLess(current, fixed)
+		}
+		if !hasLowest || versionLess(fixed, lowest) {
+			lowest = fixed
+			hasLowest = true
+		}
+	}
+	return hasLowest && versionLess(current, lowest)
+}
+
+func checkMagentoCVEs(version string) []Finding {
+	if version == "" {
+		return nil
+	}
+	current := parseVersionTuple(version)
+	// CVE database covers Magento 2 only; M1 gets its own EOL warning
+	if current[0] != 2 {
+		return nil
+	}
+
+	var findings []Finding
+	for _, cve := range MagentoCVEs {
+		if magentoVulnerable(current, cve.FixedIn) {
+			findings = append(findings, Finding{
+				FilePath:    "MAGENTO_VERSION",
+				SignatureID: cve.CVEID,
+				Severity:    cve.Severity,
+				Category:    "cve",
+				Description: cve.Description,
+				LineContent: "Fixed in: " + strings.Join(cve.FixedIn, ", ") + " | " + cve.Patch,
+				Context:     "Detected version: " + version,
+			})
+		}
+	}
+
+	sortFindings(findings)
+	return findings
+}
+
 func checkCVEs(version string, cveDB []CVEDef, label string) []Finding {
 	if version == "" {
 		return nil
@@ -63,7 +121,7 @@ func checkCVEs(version string, cveDB []CVEDef, label string) []Finding {
 func checkCVEsForCMS(cms CMSInfo) []Finding {
 	switch cms.Type {
 	case CMSMagento:
-		return checkCVEs(cms.Version, MagentoCVEs, "MAGENTO")
+		return checkMagentoCVEs(cms.Version)
 	case CMSWordPress:
 		return checkCVEs(cms.Version, WordPressCVEs, "WORDPRESS")
 	case CMSPrestaShop:

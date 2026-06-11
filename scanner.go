@@ -321,9 +321,17 @@ func (s *An4Scanner) scanFile(path string) ([]Finding, []SuspiciousFile) {
 	content := stripZeroWidth(string(data))
 	lines := strings.Split(content, "\n")
 
+	// Heuristic signatures are skipped under vendor/ — call_user_func,
+	// array_map callbacks, pack('H*') etc. are normal in composer libraries.
+	// Strong signatures (eval+base64, webshell names, skimmers) stay active.
+	inVendor := strings.HasPrefix(rel, "vendor/") || strings.Contains(rel, "/vendor/")
+
 	// Signature checks
 	for _, sig := range s.compiledSigs {
 		if sig.Extensions != nil && !sig.Extensions[ext] {
+			continue
+		}
+		if inVendor && vendorSkipSigs[sig.ID] {
 			continue
 		}
 		for i, line := range lines {
@@ -366,6 +374,9 @@ func (s *An4Scanner) scanFile(path string) ([]Finding, []SuspiciousFile) {
 	// Multi-line pattern check (catches eval split across lines)
 	mlFindings := scanMultiLine(lines, ext, rel)
 	for _, mlf := range mlFindings {
+		if inVendor && vendorSkipSigs[mlf.SignatureID] {
+			continue
+		}
 		key := mlf.FilePath + "|" + mlf.SignatureID
 		dup := false
 		for _, f := range findings {
@@ -379,9 +390,9 @@ func (s *An4Scanner) scanFile(path string) ([]Finding, []SuspiciousFile) {
 		}
 	}
 
-	// Entropy check — skip minified JS files (naturally high entropy)
+	// Entropy check — skip minified JS and vendor libs (naturally high entropy)
 	isMinified := strings.HasSuffix(rel, ".min.js") || strings.HasSuffix(rel, ".min.css")
-	if !isMinified && (ext == ".php" || ext == ".phtml" || ext == ".js") && len(content) > 500 {
+	if !isMinified && !inVendor && (ext == ".php" || ext == ".phtml" || ext == ".js") && len(content) > 500 {
 		for i, line := range lines {
 			stripped := strings.TrimSpace(line)
 			if len(stripped) > 1000 {
@@ -600,7 +611,7 @@ func (s *An4Scanner) Scan() *ScanResult {
 				findings, suspicious := s.scanFile(path)
 				n := atomic.AddInt64(&scanned, 1)
 				if s.showProgress && n%500 == 0 {
-					fmt.Fprintf(os.Stderr, "\r  Progress: %d/%d files scanned, findings so far...", n, totalFiles)
+					fmt.Fprintf(os.Stderr, "\r  Progress: %d/%d files scanned...", n, totalFiles)
 				}
 				if len(findings) > 0 || len(suspicious) > 0 {
 					mu.Lock()

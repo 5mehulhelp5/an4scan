@@ -111,7 +111,13 @@ func checkMtime(root string, days int, verbose bool) []Finding {
 			continue
 		}
 		filepath.WalkDir(sdir, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() {
+				if SkipDirs[d.Name()] {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if strings.ToLower(filepath.Ext(d.Name())) != ".php" {
