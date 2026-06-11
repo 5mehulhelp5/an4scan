@@ -198,40 +198,79 @@ var imageExts = map[string]bool{
 	".ico": true, ".bmp": true, ".webp": true, ".svg": true,
 }
 
-// isLegitImagePath returns true for image paths where PHP-like bytes in binary data are expected false positives.
-func isLegitImagePath(rel string) bool {
-	legitPrefixes := []string{
-		"pub/media/catalog/",
-		"media/catalog/",
-		"pub/media/wysiwyg/",
-		"media/wysiwyg/",
-		"pub/media/magefan_blog/",
-		"media/magefan_blog/",
-		"pub/media/amasty/",
-		"media/amasty/",
-		"pub/media/aw_rma/",
-		"media/aw_rma/",
-		"pub/media/tmp/",
-		"media/tmp/",
-		"pub/media/.thumbs",
-		"media/.thumbs",
-		"pub/media/blog/",
-		"media/blog/",
-		"pub/media/contactattachment/",
-		"media/contactattachment/",
-		"media/CrmTicket/",
-		"media/crm",
-		"media/customer/",
-		"wp-content/uploads/",
-		"img/",
-		"images/",
+// phpDangerTokens are PHP constructs that real embedded malware always contains.
+// Random binary noise that happens to contain "<?php" bytes never has these in
+// printable form right after.
+var phpDangerTokens = [][]byte{
+	[]byte("eval"), []byte("assert"), []byte("base64_decode"),
+	[]byte("gzinflate"), []byte("gzuncompress"), []byte("str_rot13"),
+	[]byte("system"), []byte("exec("), []byte("shell_exec"), []byte("passthru"),
+	[]byte("popen"), []byte("proc_open"), []byte("$_get"), []byte("$_post"),
+	[]byte("$_request"), []byte("$_cookie"), []byte("$_files"),
+	[]byte("file_put_contents"), []byte("move_uploaded_file"),
+	[]byte("create_function"), []byte("call_user_func"),
+}
+
+// phpInImage reports whether PHP bytes inside an image file are real embedded
+// code rather than random byte sequences in compressed image data. Real
+// injected PHP is a continuous run of printable ASCII containing a dangerous
+// token; noise hits binary garbage within a few bytes.
+func phpInImage(data []byte) (bool, string) {
+	off := 0
+	for {
+		idx := bytes.Index(data[off:], []byte("<?php"))
+		if idx < 0 {
+			return false, ""
+		}
+		pos := off + idx
+
+		// A file with an image extension that *starts* with <?php is a PHP
+		// script masquerading as an image — always suspicious.
+		run := printableRun(data[pos:])
+		if pos == 0 {
+			return true, printableSnippet(run)
+		}
+
+		// Real injected PHP yields a long printable run with dangerous tokens.
+		if len(run) >= 30 {
+			lower := bytes.ToLower(run)
+			for _, tok := range phpDangerTokens {
+				if bytes.Contains(lower, tok) {
+					return true, printableSnippet(run)
+				}
+			}
+		}
+		off = pos + 5
 	}
-	for _, p := range legitPrefixes {
-		if strings.HasPrefix(rel, p) || strings.Contains(rel, "/"+p) {
-			return true
+}
+
+// printableRun returns the leading run of printable ASCII (incl. tab/newline),
+// capped at 1000 bytes.
+func printableRun(b []byte) []byte {
+	max := len(b)
+	if max > 1000 {
+		max = 1000
+	}
+	for i := 0; i < max; i++ {
+		c := b[i]
+		if (c < 0x20 || c > 0x7E) && c != '\n' && c != '\r' && c != '\t' {
+			return b[:i]
 		}
 	}
-	return false
+	return b[:max]
+}
+
+func printableSnippet(b []byte) string {
+	s := make([]byte, 0, len(b))
+	for _, c := range b {
+		if c >= 0x20 && c <= 0x7E {
+			s = append(s, c)
+		}
+	}
+	if len(s) > 150 {
+		s = s[:150]
+	}
+	return string(s)
 }
 
 func (s *An4Scanner) scanFile(path string) ([]Finding, []SuspiciousFile) {
@@ -267,16 +306,14 @@ func (s *An4Scanner) scanFile(path string) ([]Finding, []SuspiciousFile) {
 
 	ext := strings.ToLower(filepath.Ext(path))
 
-	// PHP in image check — skip known media directories (catalog images, RMA uploads, etc.)
+	// PHP in image check — context-aware to avoid flagging random binary noise
 	if imageExts[ext] {
-		if !isLegitImagePath(rel) {
-			if bytes.Contains(data, []byte("<?php")) || bytes.Contains(data, []byte("<?=")) {
-				findings = append(findings, Finding{
-					FilePath: rel, SignatureID: "SF-006", Severity: HIGH,
-					Category: "suspicious", Description: "PHP code embedded in image/media file",
-					LineContent: "(binary file)",
-				})
-			}
+		if found, snippet := phpInImage(data); found {
+			findings = append(findings, Finding{
+				FilePath: rel, SignatureID: "SF-006", Severity: HIGH,
+				Category: "suspicious", Description: "PHP code embedded in image/media file",
+				LineContent: snippet,
+			})
 		}
 		return findings, suspicious
 	}
@@ -761,10 +798,20 @@ func (s *An4Scanner) Scan() *ScanResult {
 	return result
 }
 
+func bannerCentered(text string) string {
+	const width = 54
+	pad := width - len(text)
+	if pad < 0 {
+		pad = 0
+	}
+	left := pad / 2
+	return "║" + strings.Repeat(" ", left) + text + strings.Repeat(" ", pad-left) + "║"
+}
+
 func (s *An4Scanner) printBanner() {
 	fmt.Printf("\n%s╔══════════════════════════════════════════════════════╗\n", Bold)
-	fmt.Println("║                  AN4SCAN v4.0 (Go)                  ║")
-	fmt.Println("║          CMS Malware & Vulnerability Scanner        ║")
+	fmt.Println(bannerCentered("AN4SCAN " + version))
+	fmt.Println(bannerCentered("CMS Malware & Vulnerability Scanner"))
 	fmt.Printf("╚══════════════════════════════════════════════════════╝%s\n\n", Reset)
 }
 

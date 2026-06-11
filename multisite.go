@@ -100,8 +100,8 @@ func runMultiSiteScan(sites []CMSSite, scanner *An4Scanner) *MultiSiteResult {
 
 	if showProgress {
 		fmt.Printf("\n%s╔══════════════════════════════════════════════════════╗%s\n", Bold, Reset)
-		fmt.Printf("%s║                  AN4SCAN v4.0 (Go)                  ║%s\n", Bold, Reset)
-		fmt.Printf("%s║          CMS Malware & Vulnerability Scanner        ║%s\n", Bold, Reset)
+		fmt.Printf("%s%s%s\n", Bold, bannerCentered("AN4SCAN "+version), Reset)
+		fmt.Printf("%s%s%s\n", Bold, bannerCentered("CMS Malware & Vulnerability Scanner"), Reset)
 		fmt.Printf("%s╚══════════════════════════════════════════════════════╝%s\n\n", Bold, Reset)
 		fmt.Printf("  Detected %d site(s):\n", len(sites))
 		for i, s := range sites {

@@ -441,14 +441,12 @@ rule php_in_image {
         severity = "HIGH"
         category = "suspicious"
     strings:
-        $php1 = "<?php" nocase
-        $php2 = "<? " nocase
-        $php3 = "<?=" nocase
+        $php_danger = /<\?php[^\x00]{0,300}(eval|assert|base64_decode|gzinflate|str_rot13|system|shell_exec|passthru|\$_GET|\$_POST|\$_REQUEST|\$_COOKIE|move_uploaded_file|file_put_contents|call_user_func)/ nocase
         $jpg = { FF D8 FF }
         $png = { 89 50 4E 47 }
         $gif = "GIF8"
     condition:
-        ($jpg at 0 or $png at 0 or $gif at 0) and any of ($php*)
+        ($jpg at 0 or $png at 0 or $gif at 0) and $php_danger
 }
 
 rule elf_in_webdir {
