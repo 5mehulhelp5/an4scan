@@ -41,6 +41,7 @@ func main() {
 	flagWorkers := flag.Int("workers", 4, "Parallel workers")
 	flagWhitelist := flag.String("whitelist", "", "Comma-separated paths to exclude (relative to Magento root)")
 	flagNoUpdate := flag.Bool("no-update", false, "Skip automatic YARA ruleset update")
+	flagNice := flag.Bool("nice", false, "Gentle scan: lowest CPU/disk priority + 1 worker (for production servers)")
 
 	// Ruleset management
 	flagUpdate := flag.Bool("update", false, "Download/update community YARA rulesets")
@@ -104,6 +105,20 @@ Flags:
 	// Reorder args: move positional path arg to end so flags work anywhere
 	reorderedArgs := reorderArgs(os.Args[1:])
 	flag.CommandLine.Parse(reorderedArgs)
+
+	// Gentle mode: lowest CPU/IO priority, single worker unless -w given
+	if *flagNice {
+		setLowPriority()
+		workersSet := false
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "workers" || f.Name == "w" {
+				workersSet = true
+			}
+		})
+		if !workersSet {
+			*flagWorkers = 1
+		}
+	}
 
 	// Standalone commands
 	if *flagUpdate {

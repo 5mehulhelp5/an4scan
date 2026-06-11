@@ -196,6 +196,9 @@ an4scan /var/www/html --yara-rules /path/to/rules/
 # Exclude paths (known false positives)
 an4scan /var/www/html --whitelist vendor/custom,app/code/MyModule
 
+# Gentle scan on a production server (lowest CPU/disk priority, 1 worker)
+an4scan /var/www/html --nice
+
 # Skip YARA auto-update (offline mode)
 an4scan /var/www/html --no-update
 
@@ -274,6 +277,7 @@ diff:
 
 tuning:
   -w, --workers N         Parallel workers (default: 4)
+  --nice                  Gentle scan: lowest CPU/disk priority + 1 worker
   --whitelist PATHS       Comma-separated paths to exclude from scan
   --no-update             Skip automatic YARA ruleset update
 
