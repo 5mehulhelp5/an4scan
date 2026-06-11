@@ -184,6 +184,61 @@ func yaraShowStatus() {
 	fmt.Printf("\n  Total: %d rule file(s)\n", total)
 }
 
+// ─── YARA Auto-Update ──────────────────────────────────────────────────
+
+func yaraAutoUpdate(showProgress, verbose bool) {
+	metaPath := filepath.Join(yaraRulesDir, "meta.json")
+	data, err := os.ReadFile(metaPath)
+	if err == nil {
+		var meta map[string]map[string]interface{}
+		if json.Unmarshal(data, &meta) == nil && len(meta) > 0 {
+			for _, info := range meta {
+				if u, ok := info["updated"].(string); ok {
+					t, err := time.Parse(time.RFC3339, u)
+					if err == nil && time.Since(t) < 24*time.Hour {
+						return
+					}
+				}
+				break
+			}
+		}
+	}
+
+	if showProgress {
+		fmt.Println("  Updating YARA rulesets...")
+	}
+
+	os.MkdirAll(yaraRulesDir, 0755)
+	meta := make(map[string]map[string]interface{})
+	if data, err := os.ReadFile(metaPath); err == nil {
+		json.Unmarshal(data, &meta)
+	}
+
+	for _, rs := range YaraRulesets {
+		count, err := downloadRuleset(rs)
+		if err != nil {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "  [YARA] %s: update failed: %v\n", rs.Name, err)
+			}
+			continue
+		}
+		if showProgress {
+			fmt.Printf("  [YARA] %s: %d rules\n", rs.Name, count)
+		}
+		meta[rs.Name] = map[string]interface{}{
+			"updated": time.Now().Format(time.RFC3339),
+			"count":   count,
+		}
+	}
+
+	mdata, _ := json.MarshalIndent(meta, "", "  ")
+	os.WriteFile(metaPath, mdata, 0644)
+
+	if showProgress {
+		fmt.Println()
+	}
+}
+
 // ─── YARA Scanner ───────────────────────────────────────────────────────────
 
 func yaraScanner(root, extraRulesPath string, files []string, verbose bool) ([]Finding, bool) {

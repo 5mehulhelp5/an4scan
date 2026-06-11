@@ -45,6 +45,7 @@ type An4Scanner struct {
 	CheckPermissions bool
 	UseYara          bool
 	YaraRulesPath    string
+	NoAutoUpdate     bool
 	CheckVersion     bool
 	AnalyzeLogs      bool
 	CheckPlugins     bool
@@ -218,6 +219,9 @@ func isLegitImagePath(rel string) bool {
 		"media/blog/",
 		"pub/media/contactattachment/",
 		"media/contactattachment/",
+		"media/CrmTicket/",
+		"media/crm",
+		"media/customer/",
 		"wp-content/uploads/",
 		"img/",
 		"images/",
@@ -617,6 +621,9 @@ func (s *An4Scanner) Scan() *ScanResult {
 
 	// YARA scan
 	if s.UseYara {
+		if !s.NoAutoUpdate {
+			yaraAutoUpdate(s.showProgress, s.Verbose)
+		}
 		if s.showProgress {
 			fmt.Println("  Running YARA scan...")
 		}

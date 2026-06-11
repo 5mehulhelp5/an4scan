@@ -545,11 +545,21 @@ var WhitelistPaths = []string{
 	"tests/integration/",
 	"/test/",
 	"/spec/",
-	// Magento core code generators / compilers
+	// Magento 2 core code generators / compilers
 	"setup/src",
 	"lib/internal/Magento/Framework/Code/Generator",
 	"lib/internal/Magento/Framework/Interception",
 	"lib/internal/Magento/Framework/ObjectManager",
+	// Magento 1 core (lib/, app/code/core/)
+	"lib/Zend/",
+	"lib/Varien/",
+	"lib/Mage/",
+	"lib/phpseclib/",
+	"lib/PEAR/",
+	"lib/Unserialize/",
+	"app/code/core/Mage/",
+	"app/code/core/Enterprise/",
+	"app/code/core/Zend/",
 	// Generated / compiled code
 	"generated/",
 	"var/generation",
@@ -603,6 +613,11 @@ var WhitelistPaths = []string{
 	"app/code/LitExtension/",
 	// WeltPixel (legitimate license check with hex strings)
 	"app/code/WeltPixel/Backend/",
+	// Magento 1 community modules with legitimate obfuscation (license checks)
+	"app/code/community/Ophirah/",
+	"app/code/community/Amasty/",
+	"app/code/community/AW/",
+	"app/code/community/Mageworx/",
 	// Magento pub (legitimate PHP entry points)
 	"pub/.htaccess",
 	"pub/media/.htaccess",

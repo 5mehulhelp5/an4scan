@@ -200,7 +200,15 @@ func detectMagento1(root string) CMSInfo {
 			info.Source = "app/Mage.php"
 		}
 
-		if strings.Contains(content, "Enterprise") {
+		editionRe := regexp.MustCompile(`'edition'\s*=>\s*'Enterprise'`)
+		if editionRe.MatchString(content) {
+			info.Edition = "Enterprise"
+		}
+	}
+
+	if info.Edition == "Community" {
+		enterpriseDir := filepath.Join(root, "app", "code", "core", "Enterprise")
+		if fi, err := os.Stat(enterpriseDir); err == nil && fi.IsDir() {
 			info.Edition = "Enterprise"
 		}
 	}

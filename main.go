@@ -38,6 +38,7 @@ func main() {
 	// Tuning
 	flagWorkers := flag.Int("workers", 4, "Parallel workers")
 	flagWhitelist := flag.String("whitelist", "", "Comma-separated paths to exclude (relative to Magento root)")
+	flagNoUpdate := flag.Bool("no-update", false, "Skip automatic YARA ruleset update")
 
 	// Ruleset management
 	flagUpdate := flag.Bool("update", false, "Download/update community YARA rulesets")
@@ -203,6 +204,7 @@ Flags:
 	tmpl.CheckPermissions = *flagPerms
 	tmpl.UseYara = *flagYara
 	tmpl.YaraRulesPath = *flagYaraRules
+	tmpl.NoAutoUpdate = *flagNoUpdate
 	tmpl.CheckVersion = *flagVersion
 	tmpl.AnalyzeLogs = *flagLogs
 	tmpl.LogPaths = logPaths
