@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var version = "dev"
+
 func main() {
 	// Scan modules
 	flagDB := flag.Bool("db", true, "Scan database for injected malware")
@@ -81,22 +83,21 @@ func main() {
 	}
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `AN4SCAN - Magento 2 Malware Scanner (Go)
+		fmt.Fprintf(os.Stderr, `AN4SCAN %s — CMS Malware Scanner
 
 Usage: %s [flags] <path>
 
 Examples:
-  %s /var/www/magento2                        # scan confirmed threats only
-  %s /var/www/magento2 --deep                 # include suspicions
-  %s /var/www/magento2 --all                  # all modules
-  %s /var/www/magento2 --all --deep           # full audit
-  %s /var/www/magento2 --all -q               # summary only
-  %s /var/www/magento2 -j > report.json       # JSON export
+  %s /var/www/html                            # scan (all modules enabled)
+  %s /var/www/html --deep                     # include suspicions
+  %s /var/www/html -q                         # summary only
+  %s /var/www/html -j > report.json           # JSON export
+  %s /var/www/html --html report.html         # HTML report
   %s --update                                 # download YARA rulesets
   %s --status                                 # show installed rulesets
 
 Flags:
-`, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0])
+`, version, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0])
 		flag.PrintDefaults()
 	}
 
@@ -106,7 +107,7 @@ Flags:
 
 	// Standalone commands
 	if *flagUpdate {
-		fmt.Printf("\n%s  AN4SCAN — YARA Ruleset Updater%s\n\n", Bold, Reset)
+		fmt.Printf("\n%s  AN4SCAN %s — YARA Ruleset Updater%s\n\n", Bold, version, Reset)
 		yaraUpdate(*flagVerbose)
 		fmt.Println()
 		yaraShowStatus()
@@ -115,7 +116,7 @@ Flags:
 	}
 
 	if *flagStatus {
-		fmt.Printf("\n%s  AN4SCAN — YARA Ruleset Status%s\n\n", Bold, Reset)
+		fmt.Printf("\n%s  AN4SCAN %s — YARA Ruleset Status%s\n\n", Bold, version, Reset)
 		yaraShowStatus()
 		fmt.Println()
 		os.Exit(0)
