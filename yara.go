@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -50,7 +51,7 @@ func downloadRuleset(rs YaraRulesetDef) (int, error) {
 	os.RemoveAll(dest)
 	os.MkdirAll(dest, 0755)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 120 * time.Second}
 	req, _ := http.NewRequest("GET", rs.URL, nil)
 	req.Header.Set("User-Agent", "an4scan/1.0")
 	resp, err := client.Do(req)
@@ -59,7 +60,14 @@ func downloadRuleset(rs YaraRulesetDef) (int, error) {
 	}
 	defer resp.Body.Close()
 
-	gz, err := gzip.NewReader(resp.Body)
+	if rs.Format == "zip" {
+		return downloadZipRuleset(resp.Body, dest, rs)
+	}
+	return downloadTarGzRuleset(resp.Body, dest, rs)
+}
+
+func downloadTarGzRuleset(body io.Reader, dest string, rs YaraRulesetDef) (int, error) {
+	gz, err := gzip.NewReader(body)
 	if err != nil {
 		return 0, err
 	}
@@ -80,22 +88,8 @@ func downloadRuleset(rs YaraRulesetDef) (int, error) {
 			continue
 		}
 
-		// Strip leading path components
-		parts := strings.Split(hdr.Name, "/")
-		if len(parts) <= rs.Strip {
-			continue
-		}
-		rel := filepath.Join(parts[rs.Strip:]...)
-
-		// Check if matches any glob
-		matched := false
-		for _, g := range rs.Globs {
-			if matchGlob(rel, g) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
+		rel := stripAndMatch(hdr.Name, rs)
+		if rel == "" {
 			continue
 		}
 
@@ -111,6 +105,71 @@ func downloadRuleset(rs YaraRulesetDef) (int, error) {
 	}
 
 	return count, nil
+}
+
+func downloadZipRuleset(body io.Reader, dest string, rs YaraRulesetDef) (int, error) {
+	tmpFile, err := os.CreateTemp("", "an4scan-*.zip")
+	if err != nil {
+		return 0, err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if _, err := io.Copy(tmpFile, body); err != nil {
+		return 0, err
+	}
+
+	zr, err := zip.OpenReader(tmpFile.Name())
+	if err != nil {
+		return 0, err
+	}
+	defer zr.Close()
+
+	count := 0
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+
+		rel := stripAndMatch(f.Name, rs)
+		if rel == "" {
+			continue
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			continue
+		}
+
+		outPath := filepath.Join(dest, rel)
+		os.MkdirAll(filepath.Dir(outPath), 0755)
+		out, err := os.Create(outPath)
+		if err != nil {
+			rc.Close()
+			continue
+		}
+		io.Copy(out, rc)
+		out.Close()
+		rc.Close()
+		count++
+	}
+
+	return count, nil
+}
+
+func stripAndMatch(name string, rs YaraRulesetDef) string {
+	parts := strings.Split(name, "/")
+	if len(parts) <= rs.Strip {
+		return ""
+	}
+	rel := filepath.Join(parts[rs.Strip:]...)
+
+	for _, g := range rs.Globs {
+		if matchGlob(rel, g) {
+			return rel
+		}
+	}
+	return ""
 }
 
 // matchGlob handles patterns like "yara/**/*.yar"

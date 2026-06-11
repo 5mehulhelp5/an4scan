@@ -81,13 +81,14 @@ Community rulesets are automatically downloaded before scanning (cached 24h):
 
 | Ruleset | Source | Description |
 |---------|--------|-------------|
-| **sansec-magento** | [gwillem/magento-malware-scanner](https://github.com/gwillem/magento-malware-scanner) | Largest public Magento malware signature collection (Sansec/ecomscan) |
-| **signature-base** | [Neo23x0/signature-base](https://github.com/Neo23x0/signature-base) | 4000+ rules: webshells, exploits, APT tools (Florian Roth) |
+| **yara-forge** | [YARAHQ/yara-forge](https://github.com/YARAHQ/yara-forge) | 5000+ curated rules aggregated from 39 sources (Malpedia, SEKOIA, ditekshen, etc.) — updated weekly |
+| **signature-base** | [Neo23x0/signature-base](https://github.com/Neo23x0/signature-base) | Florian Roth's webshell, exploit & APT rules — updated daily |
+| **php-malware-finder** | [jvoisin/php-malware-finder](https://github.com/jvoisin/php-malware-finder) | Semantic PHP malware detection (obfuscated eval chains, backdoor patterns) |
 | **reversinglabs** | [reversinglabs/reversinglabs-yara-rules](https://github.com/reversinglabs/reversinglabs-yara-rules) | Malware family detection rules |
 | **elastic** | [elastic/protections-artifacts](https://github.com/elastic/protections-artifacts) | Cross-platform malware YARA (Linux, Windows, macOS) |
-| **magesec** | [magesec/magesecurityscanner](https://github.com/magesec/magesecurityscanner) | Mage Security Council rules |
+| **volexity** | [volexity/threat-intel](https://github.com/volexity/threat-intel) | Webshells, APT tools, real-world exploitation chains |
 
-Requires `yara` binary in PATH. Rules are stored in `~/.an4scan/rules/` and refreshed every 24h automatically. Use `--no-update` to skip, or `--update` to force a refresh.
+Requires `yara` binary in PATH. Rules are stored in `~/.an4scan/rules/` (~1800 files) and refreshed every 24h automatically. Use `--no-update` to skip, or `--update` to force a refresh.
 
 ### Database signatures (10 patterns)
 Scans CMS tables (`core_config_data`, `cms_block`, `cms_page`, `email_template`, `newsletter_template`, `catalog_*_text`, `translation`) for injected JavaScript, PHP, and obfuscated payloads. Also checks for suspicious admin users and cron jobs.

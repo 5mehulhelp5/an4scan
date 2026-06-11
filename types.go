@@ -151,4 +151,5 @@ type YaraRulesetDef struct {
 	URL         string
 	Strip       int
 	Globs       []string
+	Format      string // "tar.gz" (default) or "zip"
 }
