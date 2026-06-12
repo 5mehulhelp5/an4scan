@@ -468,7 +468,7 @@ rule php_in_image {
         severity = "HIGH"
         category = "suspicious"
     strings:
-        $php_danger = /<\?php[^\x00]{0,300}(eval|assert|base64_decode|gzinflate|str_rot13|system|shell_exec|passthru|\$_GET|\$_POST|\$_REQUEST|\$_COOKIE|move_uploaded_file|file_put_contents|call_user_func)/ nocase
+        $php_danger = /(?i)<\?php[^\x00]{0,300}(eval|assert|base64_decode|gzinflate|str_rot13|system|shell_exec|passthru|\$_GET|\$_POST|\$_REQUEST|\$_COOKIE|move_uploaded_file|file_put_contents|call_user_func)/
         $jpg = { FF D8 FF }
         $png = { 89 50 4E 47 }
         $gif = "GIF8"
@@ -484,7 +484,7 @@ rule elf_in_webdir {
     strings:
         $elf = { 7F 45 4C 46 }
     condition:
-        $elf at 0 and filesize < 10MB
+        $elf at 0
 }
 
 rule php_obfuscated_concat_chain {
@@ -500,20 +500,10 @@ rule php_obfuscated_concat_chain {
         any of them
 }
 
-rule hidden_php_extension {
-    meta:
-        description = "PHP file disguised with double extension"
-        severity = "HIGH"
-        category = "suspicious"
-    strings:
-        $php = "<?php" nocase
-    condition:
-        $php and (
-            filename matches /\.php\.(jpg|png|gif|ico|txt|bak|old)$/i or
-            filename matches /\.(jpg|png|gif|ico)\.php$/i
-        )
-}
 `
+
+// Note: double-extension detection (.php.jpg, .jpg.php) is handled natively
+// by SuspiciousFilenames patterns — no YARA external vars needed.
 
 // ─── YARA rulesets for auto-download ────────────────────────────────────────
 

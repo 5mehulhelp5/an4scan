@@ -11,8 +11,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/sansecio/yargo/ast"
+	"github.com/sansecio/yargo/parser"
+	"github.com/sansecio/yargo/scanner"
 )
 
 var yaraRulesDir = filepath.Join(os.Getenv("HOME"), ".an4scan", "rules")
@@ -321,26 +327,27 @@ func yaraAutoUpdate(showProgress, verbose bool) {
 	}
 }
 
-// ─── YARA Scanner ───────────────────────────────────────────────────────────
+// unsupportedYaraMods are string modifiers yargo's parser rejects. Stripping
+// them lets many more community rule files parse (at the cost of case-
+// sensitivity for nocase strings). The external yara binary handles them
+// natively when available.
+var unsupportedYaraMods = regexp.MustCompile(`(?i)\b(nocase|wide|xor|private|base64wide)\b`)
 
-func yaraScanner(root, extraRulesPath string, files []string, verbose bool) ([]Finding, bool) {
-	// Check if yara binary is available
-	yaraBin, err := exec.LookPath("yara")
-	if err != nil {
-		if verbose {
-			fmt.Fprintln(os.Stderr, "  [YARA] yara binary not found in PATH")
-		}
-		return nil, false
-	}
+// ─── YARA Scanner ────────────────────────────────────────────────────────────
+//
+// Hybrid engine: if the external `yara` binary is in PATH it is used for full
+// fidelity (all rules, all features). Otherwise the embedded pure-Go engine
+// (sansecio/yargo) runs — no external dependency, but only rules within yargo's
+// supported subset load (built-ins + Sansec Magento rules + simple webshell
+// rules; rules using modules/imports/externals are skipped).
 
+// yaraEngineInfo describes which engine ran and how many rules loaded, for
+// honest reporting (the embedded engine supports only a subset of YARA).
+var yaraEngineInfo string
+
+func yaraScanner(root, extraRulesPath string, files []string, workers int, verbose bool) ([]Finding, bool) {
 	// Collect rule files
 	var ruleFiles []string
-
-	// Built-in rules
-	builtinPath := filepath.Join(os.TempDir(), "an4scan-builtin.yar")
-	os.WriteFile(builtinPath, []byte(YaraRulesSource), 0644)
-	defer os.Remove(builtinPath)
-	ruleFiles = append(ruleFiles, builtinPath)
 
 	// Extra rules
 	if extraRulesPath != "" {
@@ -366,58 +373,179 @@ func yaraScanner(root, extraRulesPath string, files []string, verbose bool) ([]F
 	// Community rulesets
 	ruleFiles = append(ruleFiles, getAllRuleFiles()...)
 
+	// Full-fidelity path: external yara binary, if installed
+	if yaraBin, err := exec.LookPath("yara"); err == nil {
+		if verbose {
+			fmt.Fprintln(os.Stderr, "  [YARA] using external yara binary (full fidelity)")
+		}
+		return yaraScanExternal(yaraBin, root, ruleFiles, files, verbose)
+	}
+
+	// Parse + validate each source, merge valid rules (dedupe by name)
+	p := parser.New()
+	merged := &ast.RuleSet{}
+	seenRules := make(map[string]bool)
+	loaded, failed := 0, 0
+	compileOpts := scanner.CompileOptions{SkipInvalidRegex: true}
+
+	addRuleSet := func(rs *ast.RuleSet) {
+		if _, err := scanner.CompileWithOptions(rs, compileOpts); err != nil {
+			failed++
+			return
+		}
+		for _, r := range rs.Rules {
+			if !seenRules[r.Name] {
+				seenRules[r.Name] = true
+				merged.Rules = append(merged.Rules, r)
+			}
+		}
+		loaded++
+	}
+
+	// Built-in rules
+	if rs, err := p.Parse(YaraRulesSource); err == nil {
+		addRuleSet(rs)
+	} else {
+		failed++
+	}
+
+	for _, rf := range ruleFiles {
+		rs, err := p.ParseFile(rf)
+		if err != nil {
+			// Retry after stripping modifiers yargo doesn't support
+			if data, rerr := os.ReadFile(rf); rerr == nil {
+				if rs2, serr := p.Parse(unsupportedYaraMods.ReplaceAllString(string(data), "")); serr == nil {
+					addRuleSet(rs2)
+					continue
+				}
+			}
+			failed++
+			continue
+		}
+		addRuleSet(rs)
+	}
+
+	rules, err := scanner.CompileWithOptions(merged, compileOpts)
+	if err != nil || rules.NumRules() == 0 {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "  [YARA] no usable rules (compile error: %v)\n", err)
+		}
+		return nil, false
+	}
+
+	yaraEngineInfo = fmt.Sprintf("embedded engine, %d rules (%d/%d rule files; install 'yara' binary for full rulesets)",
+		rules.NumRules(), loaded, loaded+failed)
 	if verbose {
-		fmt.Fprintf(os.Stderr, "  [YARA] Using %d rule file(s)\n", len(ruleFiles))
+		fmt.Fprintf(os.Stderr, "  [YARA] %s\n", yaraEngineInfo)
+	}
+
+	// Parallel scan
+	var findings []Finding
+	var mu sync.Mutex
+	fileCh := make(chan string, 256)
+	var wg sync.WaitGroup
+
+	if workers < 1 {
+		workers = 1
+	}
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for target := range fileCh {
+				info, err := os.Stat(target)
+				if err != nil || info.Size() > MaxFileSize || info.Size() == 0 {
+					continue
+				}
+				data, err := os.ReadFile(target)
+				if err != nil {
+					continue
+				}
+
+				var matches scanner.MatchRules
+				if err := rules.ScanMem(data, 0, 10*time.Second, &matches); err != nil {
+					continue
+				}
+				if len(matches) == 0 {
+					continue
+				}
+
+				rel, _ := filepath.Rel(root, target)
+				mu.Lock()
+				for _, m := range matches {
+					sev := strings.ToUpper(m.MetaString("severity", HIGH))
+					if _, ok := severityOrder[sev]; !ok {
+						sev = HIGH
+					}
+					findings = append(findings, Finding{
+						FilePath:    rel,
+						SignatureID: "YARA-" + m.Rule,
+						Severity:    sev,
+						Category:    "yara",
+						Description: "[YARA] " + m.MetaString("description", m.Rule),
+					})
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+
+	for _, f := range files {
+		fileCh <- f
+	}
+	close(fileCh)
+	wg.Wait()
+
+	return findings, true
+}
+
+// yaraScanExternal scans using the system yara binary: compile each ruleset to
+// a temp file once, then scan all targets against each compiled ruleset.
+func yaraScanExternal(yaraBin, root string, ruleFiles, files []string, verbose bool) ([]Finding, bool) {
+	// Built-in rules first
+	builtinPath := filepath.Join(os.TempDir(), "an4scan-builtin.yar")
+	if err := os.WriteFile(builtinPath, []byte(YaraRulesSource), 0644); err == nil {
+		defer os.Remove(builtinPath)
+		ruleFiles = append([]string{builtinPath}, ruleFiles...)
 	}
 
 	var findings []Finding
-	loaded := 0
-	failed := 0
+	loaded, failed := 0, 0
 
-	// Scan files with each rule file
 	for _, ruleFile := range ruleFiles {
-		// Test if rule file compiles
-		cmd := exec.Command(yaraBin, "-w", "-C", ruleFile)
-		if err := cmd.Run(); err != nil {
+		// Skip rule files that don't compile (missing modules/externals)
+		if err := exec.Command(yaraBin, "-w", "-C", ruleFile).Run(); err != nil {
 			failed++
 			continue
 		}
 		loaded++
 
-		// Scan each file
-		for _, target := range files {
-			info, err := os.Stat(target)
-			if err != nil || info.Size() > MaxFileSize || info.Size() == 0 {
+		// -r recursive, -w no warnings; scan the whole tree once per ruleset
+		cmd := exec.Command(yaraBin, "-w", "-r", ruleFile, root)
+		out, err := cmd.Output()
+		if err != nil || len(out) == 0 {
+			continue
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			parts := strings.SplitN(line, " ", 2)
+			if len(parts) != 2 || strings.HasPrefix(line, "0x") {
 				continue
 			}
-
-			cmd := exec.Command(yaraBin, "-w", "-s", ruleFile, target)
-			out, err := cmd.Output()
-			if err != nil || len(out) == 0 {
-				continue
-			}
-
-			rel, _ := filepath.Rel(root, target)
-			// Parse YARA output: "rulename filepath"
-			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-				parts := strings.Fields(line)
-				if len(parts) >= 2 && !strings.HasPrefix(line, "0x") {
-					ruleName := parts[0]
-					findings = append(findings, Finding{
-						FilePath:    rel,
-						SignatureID: "YARA-" + ruleName,
-						Severity:    HIGH,
-						Category:    "yara",
-						Description: "[YARA] " + ruleName,
-					})
-				}
-			}
+			ruleName, absPath := parts[0], parts[1]
+			rel, _ := filepath.Rel(root, absPath)
+			findings = append(findings, Finding{
+				FilePath:    rel,
+				SignatureID: "YARA-" + ruleName,
+				Severity:    HIGH,
+				Category:    "yara",
+				Description: "[YARA] " + ruleName,
+			})
 		}
 	}
 
+	yaraEngineInfo = fmt.Sprintf("external yara binary, %d rule file(s) loaded, %d skipped", loaded, failed)
 	if verbose {
-		fmt.Fprintf(os.Stderr, "  [YARA] Loaded %d ruleset(s), %d failed\n", loaded, failed)
+		fmt.Fprintf(os.Stderr, "  [YARA] %s\n", yaraEngineInfo)
 	}
-
 	return findings, true
 }

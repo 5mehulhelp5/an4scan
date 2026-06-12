@@ -57,7 +57,7 @@ an4scan /var/www/html -q
 | **Log analysis** | `--logs` | on | Parse Apache/Nginx logs for exploit attempts, brute force, SQLi |
 | **Permissions** | `--permissions` | on | World-writable files, SUID/SGID, readable credentials |
 | **Modified files** | `--mtime` | on | Core files modified recently (default: 7 days) |
-| **YARA scan** | `--yara` | on | 4 built-in rules + community rulesets (auto-downloaded) |
+| **YARA scan** | `--yara` | on | Built-in rules + community rulesets, embedded pure-Go engine (no `yara` binary needed) |
 | **Process scan** | `--processes` | on | Detect reverse shells, crypto miners, rootkits, C2 connections |
 | **Timeline** | *(automatic)* | on | Reconstructs infection timeline from findings |
 | **Deep mode** | `--deep` | off | Include MEDIUM/LOW/INFO findings |
@@ -88,7 +88,9 @@ Community rulesets are automatically downloaded before scanning (cached 24h):
 | **elastic** | [elastic/protections-artifacts](https://github.com/elastic/protections-artifacts) | Cross-platform malware YARA (Linux, Windows, macOS) |
 | **volexity** | [volexity/threat-intel](https://github.com/volexity/threat-intel) | Webshells, APT tools, real-world exploitation chains |
 
-Requires `yara` binary in PATH. Rules are stored in `~/.an4scan/rules/` (~1800 files) and refreshed every 24h automatically. Use `--no-update` to skip, or `--update` to force a refresh.
+**No external dependency**: an4scan embeds a pure-Go YARA engine ([sansecio/yargo](https://github.com/sansecio/yargo)), so YARA scanning works out of the box. The embedded engine supports a subset of YARA — it loads the built-in rules plus the Sansec/Magento and simpler community rules (~450 of the ~1800 rule files). If the system `yara` binary is installed, an4scan uses it instead for full fidelity (all rulesets, including those using modules/imports/external variables). The report shows which engine ran.
+
+Rules are stored in `~/.an4scan/rules/` and refreshed every 24h automatically. Use `--no-update` to skip, or `--update` to force a refresh.
 
 ### Database signatures (10 patterns)
 Scans CMS tables (`core_config_data`, `cms_block`, `cms_page`, `email_template`, `newsletter_template`, `catalog_*_text`, `translation`) for injected JavaScript, PHP, and obfuscated payloads. Also checks for suspicious admin users and cron jobs.

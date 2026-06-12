@@ -711,14 +711,14 @@ func (s *An4Scanner) Scan() *ScanResult {
 		if s.showProgress {
 			fmt.Println("  Running YARA scan...")
 		}
-		yaraFindings, available := yaraScanner(s.Path, s.YaraRulesPath, files, s.Verbose)
+		yaraFindings, available := yaraScanner(s.Path, s.YaraRulesPath, files, s.Workers, s.Verbose)
 		if available {
 			result.YaraFindings = yaraFindings
 			if s.showProgress {
-				fmt.Printf("  YARA: %d finding(s)\n", len(result.YaraFindings))
+				fmt.Printf("  YARA: %d finding(s) [%s]\n", len(result.YaraFindings), yaraEngineInfo)
 			}
 		} else if s.showProgress {
-			fmt.Println("  YARA: skipped (yara binary not found)")
+			fmt.Println("  YARA: skipped (no usable rules — run an4scan --update)")
 		}
 		if s.showProgress {
 			fmt.Println()
