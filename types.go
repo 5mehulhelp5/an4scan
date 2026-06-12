@@ -82,6 +82,7 @@ type ScanResult struct {
 	ProcessFindings    []Finding         `json:"process_findings,omitempty"`
 	VersionInfo        map[string]string `json:"version_info"`
 	CVEFindings        []Finding         `json:"cve_findings"`
+	LogsAnalyzed       bool              `json:"logs_analyzed"`
 	Timeline           []TimelineEvent   `json:"timeline"`
 	SuspiciousIPs      []SuspiciousIP    `json:"suspicious_ips"`
 	Summary            ScanSummary       `json:"summary"`

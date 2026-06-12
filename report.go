@@ -156,7 +156,47 @@ func printTextReport(result *ScanResult) {
 		fmt.Println()
 	}
 
+	printLogScanHint(result)
 	printYaraEngineHint()
+}
+
+// printLogScanHint recommends a deeper log analysis when file-based malware was
+// found but access logs were not analyzed — that's when knowing the entry
+// vector / upload time / attacker IPs matters most.
+func printLogScanHint(result *ScanResult) {
+	if result.LogsAnalyzed {
+		return
+	}
+
+	files := suspiciousFileCount(result)
+	if files == 0 {
+		return
+	}
+
+	fmt.Printf("  %s%sℹ %d suspicious file(s) found — run with --logs to analyze access logs%s\n",
+		Bold, severityColors[HIGH], files, Reset)
+	fmt.Printf("  %s  for the entry vector, upload time, and attacker IPs (off by default; can be slow).%s\n\n",
+		Dim, Reset)
+}
+
+// suspiciousFileCount returns the number of distinct files with confirmed or
+// likely malware findings, plus suspicious-named files.
+func suspiciousFileCount(result *ScanResult) int {
+	files := make(map[string]bool)
+	for _, f := range result.Findings {
+		if f.Confidence == ConfidenceConfirmed || f.Confidence == ConfidenceLikely {
+			files[f.FilePath] = true
+		}
+	}
+	for _, f := range result.YaraFindings {
+		if f.Confidence == ConfidenceConfirmed || f.Confidence == ConfidenceLikely {
+			files[f.FilePath] = true
+		}
+	}
+	for _, sf := range result.SuspiciousFiles {
+		files[sf.File] = true
+	}
+	return len(files)
 }
 
 // printYaraEngineHint warns when YARA ran on the embedded engine (partial

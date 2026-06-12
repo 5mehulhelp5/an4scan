@@ -17,7 +17,7 @@ func main() {
 	flagMtimeDays := flag.Int("mtime-days", 7, "Days window for --mtime")
 	flagPerms := flag.Bool("permissions", true, "Check file permissions (world-writable, SUID/SGID)")
 	flagVersion := flag.Bool("version", true, "Detect Magento version and check known CVEs")
-	flagLogs := flag.Bool("logs", true, "Analyze access logs for exploit attempts")
+	flagLogs := flag.Bool("logs", false, "Analyze access logs for exploit attempts (off by default; can be slow on large/shared logs)")
 	flagLogPath := flag.String("log-path", "", "Comma-separated path(s) to access log files")
 	flagYara := flag.Bool("yara", true, "Enable YARA scanning")
 	flagYaraRules := flag.String("yara-rules", "", "Path to additional YARA rules file or directory")

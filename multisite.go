@@ -281,6 +281,25 @@ func printMultiSiteReport(result *MultiSiteResult, jsonOutput bool) {
 		fmt.Println()
 	}
 
+	// Recommend log analysis if any site has suspicious files but logs weren't run.
+	// --logs is a global flag, so all sites share the same LogsAnalyzed value.
+	logsRun, suspicious := false, 0
+	for _, site := range result.Sites {
+		if site.ScanResult == nil {
+			continue
+		}
+		if site.ScanResult.LogsAnalyzed {
+			logsRun = true
+		}
+		suspicious += suspiciousFileCount(site.ScanResult)
+	}
+	if !logsRun && suspicious > 0 {
+		fmt.Printf("  %s%sℹ %d suspicious file(s) across sites — re-run with --logs to analyze access logs%s\n",
+			Bold, severityColors[HIGH], suspicious, Reset)
+		fmt.Printf("  %s  for the entry vector, upload time, and attacker IPs (off by default; can be slow).%s\n\n",
+			Dim, Reset)
+	}
+
 	printYaraEngineHint()
 }
 

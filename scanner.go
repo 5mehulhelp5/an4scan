@@ -799,6 +799,7 @@ func (s *An4Scanner) Scan() *ScanResult {
 
 	// Log analysis
 	if s.AnalyzeLogs {
+		result.LogsAnalyzed = true
 		if s.showProgress {
 			fmt.Println("  Analyzing access logs...")
 		}

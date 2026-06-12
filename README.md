@@ -2,7 +2,7 @@
 
 Single-binary security scanner for **Magento 1 & 2**, **WordPress**, and **PrestaShop**. Auto-detects the CMS, then runs targeted checks: backdoors, skimmers, obfuscated code, plugin vulnerabilities, core file integrity, database injections, known CVEs, malicious processes, and exploit attempts in access logs.
 
-No dependencies. Just download and run. All scan modules enabled by default.
+No dependencies. Just download and run. All scan modules enabled by default except log analysis (opt-in via `--logs`).
 
 ## Install
 
@@ -54,7 +54,7 @@ an4scan /var/www/html -q
 | **Plugin scan** | `--plugins` | on | List plugins/modules, check against known vulnerable versions |
 | **Core integrity** | `--integrity` | on | WordPress: verify checksums via wordpress.org API. Magento/PS: mtime-based |
 | **Database scan** | `--db` | on | Scan CMS tables for injected scripts, suspicious admins, cron jobs |
-| **Log analysis** | `--logs` | on | Parse Apache/Nginx logs for exploit attempts, brute force, SQLi |
+| **Log analysis** | `--logs` | **off** | Parse Apache/Nginx logs for exploit attempts, brute force, SQLi. Off by default (slow on large/shared logs); recommended automatically when suspicious files are found |
 | **Permissions** | `--permissions` | on | World-writable files, SUID/SGID, readable credentials |
 | **Modified files** | `--mtime` | on | Core files modified recently (default: 7 days) |
 | **YARA scan** | `--yara` | on | Built-in rules + community rulesets, embedded pure-Go engine (no `yara` binary needed) |
@@ -62,7 +62,7 @@ an4scan /var/www/html -q
 | **Timeline** | *(automatic)* | on | Reconstructs infection timeline from findings |
 | **Deep mode** | `--deep` | off | Include MEDIUM/LOW/INFO findings |
 
-All modules are enabled by default. Use `--no-<module>=false` to disable specific ones (e.g. `--db=false`).
+All modules are enabled by default **except log analysis** (`--logs`, opt-in). Use `--<module>=false` to disable others (e.g. `--db=false`).
 
 ## Detection Sources
 
@@ -294,7 +294,7 @@ scan modules (all enabled by default):
   --mtime                 Recently modified core files (default: true)
   --mtime-days N          Time window for --mtime (default: 7)
   --permissions           Check file permissions (default: true)
-  --logs                  Analyze access logs (default: true)
+  --logs                  Analyze access logs (default: false — recommended after suspicious files found)
   --log-path PATH         Access log file path(s), comma-separated
   --yara                  YARA scanning (default: true)
   --yara-rules PATH       Additional YARA rules file or directory
