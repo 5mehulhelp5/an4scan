@@ -10,6 +10,28 @@ import (
 
 var version = "dev"
 
+// printFlagsOneLine prints each flag as "  -name<type>   description" on a
+// single line, with descriptions aligned. Replaces flag.PrintDefaults() which
+// wraps to two lines per flag.
+func printFlagsOneLine() {
+	type row struct{ name, desc string }
+	var rows []row
+	width := 0
+	flag.VisitAll(func(f *flag.Flag) {
+		name := "-" + f.Name
+		if t, _ := flag.UnquoteUsage(f); t != "" {
+			name += " " + t
+		}
+		if len(name) > width {
+			width = len(name)
+		}
+		rows = append(rows, row{name, f.Usage})
+	})
+	for _, r := range rows {
+		fmt.Fprintf(os.Stderr, "  %-*s   %s\n", width, r.name, r.desc)
+	}
+}
+
 func main() {
 	// Scan modules
 	flagDB := flag.Bool("db", true, "Scan database for injected malware")
@@ -106,7 +128,7 @@ Examples:
 
 Flags:
 `, version, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0])
-		flag.PrintDefaults()
+		printFlagsOneLine()
 	}
 
 	// Reorder args: move positional path arg to end so flags work anywhere
