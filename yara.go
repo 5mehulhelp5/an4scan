@@ -42,6 +42,17 @@ func yaraUpdate(verbose bool) {
 		}
 	}
 
+	fmt.Println("  [magevulndb] Downloading Sansec vulnerable extension database...")
+	if err := magevulndbUpdate(verbose); err != nil {
+		fmt.Fprintf(os.Stderr, "  [magevulndb] Error: %v\n", err)
+	} else {
+		fmt.Println("  [magevulndb] Magento 1+2 extension vulnerability lists installed")
+		meta["magevulndb"] = map[string]interface{}{
+			"updated": time.Now().Format(time.RFC3339),
+			"count":   2,
+		}
+	}
+
 	data, _ := json.MarshalIndent(meta, "", "  ")
 	os.WriteFile(metaPath, data, 0644)
 }
@@ -288,6 +299,18 @@ func yaraAutoUpdate(showProgress, verbose bool) {
 			"updated": time.Now().Format(time.RFC3339),
 			"count":   count,
 		}
+	}
+
+	if err := magevulndbUpdate(verbose); err == nil {
+		if showProgress {
+			fmt.Println("  [magevulndb] extension vulnerability lists updated")
+		}
+		meta["magevulndb"] = map[string]interface{}{
+			"updated": time.Now().Format(time.RFC3339),
+			"count":   2,
+		}
+	} else if verbose {
+		fmt.Fprintf(os.Stderr, "  [magevulndb] update failed: %v\n", err)
 	}
 
 	mdata, _ := json.MarshalIndent(meta, "", "  ")

@@ -29,6 +29,17 @@ const (
 
 const MaxFileSize = 5 * 1024 * 1024
 
+// Confidence levels for malware findings
+const (
+	ConfidenceConfirmed = "confirmed" // pattern is malware with near-certainty
+	ConfidenceLikely    = "likely"    // strong indicator, manual check advised
+	ConfidenceHeuristic = "heuristic" // generic pattern, FP-prone
+)
+
+var confidenceOrder = map[string]int{
+	ConfidenceConfirmed: 0, ConfidenceLikely: 1, ConfidenceHeuristic: 2, "": 1,
+}
+
 // Finding represents a single scan finding.
 type Finding struct {
 	FilePath    string `json:"file_path"`
@@ -39,6 +50,7 @@ type Finding struct {
 	LineNumber  int    `json:"line_number"`
 	LineContent string `json:"line_content"`
 	Context     string `json:"context,omitempty"`
+	Confidence  string `json:"confidence,omitempty"`
 }
 
 // SuspiciousFile represents a file with a suspicious name/path.

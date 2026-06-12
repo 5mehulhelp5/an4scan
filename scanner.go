@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,6 +47,7 @@ type An4Scanner struct {
 	UseYara          bool
 	YaraRulesPath    string
 	NoAutoUpdate     bool
+	NoCache          bool
 	CheckVersion     bool
 	AnalyzeLogs      bool
 	CheckPlugins     bool
@@ -594,11 +596,17 @@ func (s *An4Scanner) Scan() *ScanResult {
 		fmt.Printf("  Found %d files to scan...\n\n", totalFiles)
 	}
 
+	// Incremental cache: skip files unchanged since their last clean scan
+	var cache *scanCache
+	if !s.NoCache {
+		cache = loadScanCache(s.Path, s.cacheKey())
+	}
+
 	// Parallel file scan
 	var allFindings []Finding
 	var allSuspicious []SuspiciousFile
 	var mu sync.Mutex
-	var scanned int64
+	var scanned, cacheHits int64
 
 	fileCh := make(chan string, 256)
 	var wg sync.WaitGroup
@@ -608,6 +616,19 @@ func (s *An4Scanner) Scan() *ScanResult {
 		go func() {
 			defer wg.Done()
 			for path := range fileCh {
+				var st os.FileInfo
+				if cache != nil {
+					rel, _ := filepath.Rel(s.Path, path)
+					if fi, err := os.Stat(path); err == nil {
+						st = fi
+						if cache.isClean(rel, fi.ModTime().Unix(), fi.Size()) {
+							atomic.AddInt64(&scanned, 1)
+							atomic.AddInt64(&cacheHits, 1)
+							continue
+						}
+					}
+				}
+
 				findings, suspicious := s.scanFile(path)
 				n := atomic.AddInt64(&scanned, 1)
 				if s.showProgress && n%500 == 0 {
@@ -618,6 +639,9 @@ func (s *An4Scanner) Scan() *ScanResult {
 					allFindings = append(allFindings, findings...)
 					allSuspicious = append(allSuspicious, suspicious...)
 					mu.Unlock()
+				} else if cache != nil && st != nil {
+					rel, _ := filepath.Rel(s.Path, path)
+					cache.markClean(rel, st.ModTime().Unix(), st.Size())
 				}
 			}
 		}()
@@ -630,7 +654,17 @@ func (s *An4Scanner) Scan() *ScanResult {
 	wg.Wait()
 
 	if s.showProgress {
-		fmt.Fprintf(os.Stderr, "\r  Progress: %d/%d files scanned.        \n\n", totalFiles, totalFiles)
+		fmt.Fprintf(os.Stderr, "\r  Progress: %d/%d files scanned.        \n", totalFiles, totalFiles)
+		if cacheHits > 0 {
+			fmt.Printf("  Cache: %d unchanged file(s) skipped\n", cacheHits)
+		}
+		fmt.Println()
+	}
+
+	if cache != nil {
+		if err := cache.save(); err != nil && s.Verbose {
+			fmt.Fprintf(os.Stderr, "  Warning: cannot save scan cache: %v\n", err)
+		}
 	}
 
 	// Database scan
@@ -650,9 +684,10 @@ func (s *An4Scanner) Scan() *ScanResult {
 		if s.showProgress {
 			fmt.Println("  Checking file permissions...")
 		}
-		result.PermissionFindings = checkPermissions(s.Path, s.Verbose)
+		permFindings := checkPermissions(s.Path, s.Verbose)
+		result.PermissionFindings = aggregateMassFindings(permFindings, 50)
 		if s.showProgress {
-			fmt.Printf("  Permissions: %d finding(s)\n\n", len(result.PermissionFindings))
+			fmt.Printf("  Permissions: %d finding(s)\n\n", len(permFindings))
 		}
 	}
 
@@ -661,9 +696,10 @@ func (s *An4Scanner) Scan() *ScanResult {
 		if s.showProgress {
 			fmt.Printf("  Checking recently modified files (%d days)...\n", s.MtimeDays)
 		}
-		result.MtimeFindings = checkMtime(s.Path, s.MtimeDays, s.Verbose)
+		mtimeFindings := checkMtime(s.Path, s.MtimeDays, s.Verbose)
+		result.MtimeFindings = aggregateMassFindings(mtimeFindings, 50)
 		if s.showProgress {
-			fmt.Printf("  Modified: %d finding(s)\n\n", len(result.MtimeFindings))
+			fmt.Printf("  Modified: %d finding(s)\n\n", len(mtimeFindings))
 		}
 	}
 
@@ -724,6 +760,13 @@ func (s *An4Scanner) Scan() *ScanResult {
 			fmt.Printf("  Plugins/modules: %d detected\n", len(result.Plugins))
 		}
 		result.PluginFindings = checkPluginVulns(result.Plugins, s.cms.Type)
+		if s.cms.Type == CMSMagento {
+			major := 2
+			if strings.HasPrefix(s.cms.Version, "1") {
+				major = 1
+			}
+			result.PluginFindings = append(result.PluginFindings, checkMagevulndb(result.Plugins, major)...)
+		}
 		if s.showProgress {
 			fmt.Printf("  Plugin vulnerabilities: %d\n\n", len(result.PluginFindings))
 		}
@@ -770,6 +813,12 @@ func (s *An4Scanner) Scan() *ScanResult {
 			fmt.Println()
 		}
 	}
+
+	// Assign confidence levels to malware findings (before timeline wording)
+	setConfidence(allFindings)
+	setConfidence(result.DBFindings)
+	setConfidence(result.YaraFindings)
+	setConfidence(result.ProcessFindings)
 
 	// Timeline
 	hasTemporalData := len(result.MtimeFindings) > 0 || len(result.LogFindings) > 0 ||
@@ -827,13 +876,12 @@ func (s *An4Scanner) printBanner() {
 }
 
 func sortFindings(f []Finding) {
-	for i := 0; i < len(f); i++ {
-		for j := i + 1; j < len(f); j++ {
-			if severityOrder[f[i].Severity] > severityOrder[f[j].Severity] {
-				f[i], f[j] = f[j], f[i]
-			}
+	sort.SliceStable(f, func(i, j int) bool {
+		if severityOrder[f[i].Severity] != severityOrder[f[j].Severity] {
+			return severityOrder[f[i].Severity] < severityOrder[f[j].Severity]
 		}
-	}
+		return confidenceOrder[f[i].Confidence] < confidenceOrder[f[j].Confidence]
+	})
 }
 
 func sortSuspicious(s []SuspiciousFile) {
@@ -876,7 +924,7 @@ func buildSummary(result *ScanResult) ScanSummary {
 	}
 
 	return ScanSummary{
-		TotalFindings:        len(allFindings),
+		TotalFindings:        len(allFindings) + len(result.PluginFindings),
 		TotalSuspiciousFiles: len(result.SuspiciousFiles),
 		AffectedFiles:        len(affected),
 		BySeverity:           bySeverity,

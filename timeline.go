@@ -65,11 +65,17 @@ func buildTimeline(root string, result *ScanResult) []TimelineEvent {
 				continue
 			}
 			mtime := info.ModTime()
+			label := "Suspicious pattern: "
+			if f.Confidence == ConfidenceConfirmed {
+				label = "Malware detected: "
+			} else if f.Confidence == ConfidenceLikely {
+				label = "Likely malware: "
+			}
 			events = append(events, TimelineEvent{
 				Timestamp:   mtime.Format(time.RFC3339),
 				Type:        "malware_file",
 				Severity:    f.Severity,
-				Description: "Malware detected: " + f.Description,
+				Description: label + f.Description,
 				File:        f.FilePath,
 				SignatureID: f.SignatureID,
 				Extra:       "mtime=" + mtime.Format("2006-01-02 15:04:05"),

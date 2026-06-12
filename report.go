@@ -279,6 +279,16 @@ func printGroupedFindings(findings []Finding) {
 		}
 	}
 
+	confidenceTag := func(f Finding) string {
+		switch f.Confidence {
+		case ConfidenceConfirmed:
+			return severityColors[CRITICAL] + " ●confirmed" + Reset
+		case ConfidenceHeuristic:
+			return Dim + " ○heuristic" + Reset
+		}
+		return ""
+	}
+
 	currentSev := ""
 	for _, key := range order {
 		g := groups[key]
@@ -288,9 +298,10 @@ func printGroupedFindings(findings []Finding) {
 			fmt.Printf("\n  %s%s── %s ──%s\n", color, Bold, g.Severity, Reset)
 		}
 		color := severityColors[g.Severity]
+		tag := confidenceTag(g.Sample)
 
 		if g.Count == 1 {
-			fmt.Printf("\n  %s[%s]%s %s\n", color, g.SignatureID, Reset, g.Description)
+			fmt.Printf("\n  %s[%s]%s %s%s\n", color, g.SignatureID, Reset, g.Description, tag)
 			fmt.Printf("  %sFile: %s%s\n", Dim, g.Files[0], Reset)
 			if g.Sample.LineContent != "" {
 				content := g.Sample.LineContent
@@ -300,7 +311,7 @@ func printGroupedFindings(findings []Finding) {
 				fmt.Printf("  %sCode: %s%s\n", Dim, content, Reset)
 			}
 		} else {
-			fmt.Printf("\n  %s[%s]%s %s %s(%d files)%s\n", color, g.SignatureID, Reset, g.Description, Dim, g.Count, Reset)
+			fmt.Printf("\n  %s[%s]%s %s%s %s(%d files)%s\n", color, g.SignatureID, Reset, g.Description, tag, Dim, g.Count, Reset)
 			for _, file := range g.Files {
 				fmt.Printf("  %s  %s%s\n", Dim, file, Reset)
 			}

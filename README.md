@@ -103,13 +103,48 @@ Reads `/proc` to detect:
 - Suspicious outbound connections on known C2 ports (4444, 5555, 31337, etc.)
 
 ### CVE databases
-Hardcoded CVE lists for Magento (2.3.x–2.4.7), WordPress, and PrestaShop with CVSS scores.
+Core CVE lists for Magento (2.3.x–2.4.x, patch-level aware with Adobe backport lines), WordPress, and PrestaShop.
+
+### Extension vulnerability database (auto-updated)
+[Sansec magevulndb](https://github.com/sansecio/magevulndb) — actively maintained list of vulnerable Magento 1 & 2 extensions, downloaded automatically alongside YARA rules.
 
 ### Log exploit patterns (12 patterns)
 Detects exploit attempts in Apache/Nginx access logs: path traversal, PHP injection, webshell access, brute force, xmlrpc abuse.
 
 ### Plugin vulnerability database
 Known vulnerable versions for Magento extensions, WordPress plugins/themes, and PrestaShop modules.
+
+## Confidence Levels
+
+Malware findings carry a confidence level, and the report sorts by it within each severity:
+
+- **●confirmed** — near-certain malware (eval+base64 chains, known webshells, skimmer domains, verified PHP-in-image, reverse shells)
+- *(no tag)* — likely: strong indicator, manual review advised
+- **○heuristic** — generic pattern that often matches legitimate code
+
+The timeline uses matching wording: "Malware detected" only for confirmed findings, "Suspicious pattern" for heuristics.
+
+## Scheduled Scans (cron mode)
+
+```bash
+# Nightly gentle scan, alert only on NEW findings since last run
+0 3 * * * an4scan /var/www/html --nice --cron --webhook https://hooks.example.com/an4scan
+```
+
+`--cron` runs silently and compares against the previous saved scan: the first run saves a baseline, subsequent runs only output (and POST to the webhook) findings that are **new**. Exit code 2 = new CRITICAL, 1 = new HIGH, 0 = nothing new. Works in multi-site mode too.
+
+## Quarantine
+
+```bash
+an4scan /var/www/html --quarantine          # dry-run: list what would move
+an4scan /var/www/html --quarantine --force  # move confirmed malware
+```
+
+Only **confirmed** malware files are quarantined. Files are moved to `.an4scan/quarantine/<timestamp>/` (chmod 400) with a `manifest.json` recording original paths — nothing is deleted.
+
+## Incremental Cache
+
+Files scanned clean are remembered (`.an4scan/filecache.gob`, mtime+size). Subsequent scans skip unchanged clean files — on large sites, repeat scans drop from minutes to seconds. The cache invalidates automatically when signatures or the scanner version change. Disable with `--no-cache`.
 
 ## Output Modes
 
@@ -275,11 +310,18 @@ diff:
   --save                  Save scan for future diffing (in .an4scan/)
   --diff PATH             Compare with previous scan JSON ("auto" for last saved)
 
+automation:
+  --cron                  Silent mode: only report findings NEW since last scan
+  --webhook URL           POST new findings as JSON (with --cron)
+  --quarantine            List confirmed-malware files to quarantine (dry-run)
+  --quarantine --force    Move them to .an4scan/quarantine/
+
 tuning:
   -w, --workers N         Parallel workers (default: 4)
   --nice                  Gentle scan: lowest CPU/disk priority + 1 worker
   --whitelist PATHS       Comma-separated paths to exclude from scan
   --no-update             Skip automatic YARA ruleset update
+  --no-cache              Disable incremental scan cache
 
 ruleset management:
   --update                Download/update community YARA rulesets

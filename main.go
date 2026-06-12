@@ -42,6 +42,13 @@ func main() {
 	flagWhitelist := flag.String("whitelist", "", "Comma-separated paths to exclude (relative to Magento root)")
 	flagNoUpdate := flag.Bool("no-update", false, "Skip automatic YARA ruleset update")
 	flagNice := flag.Bool("nice", false, "Gentle scan: lowest CPU/disk priority + 1 worker (for production servers)")
+	flagNoCache := flag.Bool("no-cache", false, "Disable incremental scan cache (rescan all files)")
+
+	// Automation
+	flagCron := flag.Bool("cron", false, "Cron mode: silent, only report findings NEW since last scan")
+	flagWebhook := flag.String("webhook", "", "Webhook URL to POST new findings to (used with --cron)")
+	flagQuarantine := flag.Bool("quarantine", false, "List confirmed-malware files to quarantine (dry-run)")
+	flagForce := flag.Bool("force", false, "Apply quarantine moves (used with --quarantine)")
 
 	// Ruleset management
 	flagUpdate := flag.Bool("update", false, "Download/update community YARA rulesets")
@@ -69,7 +76,7 @@ func main() {
 						"severity": true, "s": true, "workers": true, "w": true,
 						"output": true, "o": true, "whitelist": true,
 						"log-path": true, "yara-rules": true, "mtime-days": true,
-						"html": true, "diff": true,
+						"html": true, "diff": true, "webhook": true,
 					}
 					if needsVal[name] && i+1 < len(args) {
 						i++
@@ -105,6 +112,11 @@ Flags:
 	// Reorder args: move positional path arg to end so flags work anywhere
 	reorderedArgs := reorderArgs(os.Args[1:])
 	flag.CommandLine.Parse(reorderedArgs)
+
+	// Cron mode: silent scan, alert only on new findings
+	if *flagCron {
+		*flagQuiet = true
+	}
 
 	// Gentle mode: lowest CPU/IO priority, single worker unless -w given
 	if *flagNice {
@@ -221,6 +233,7 @@ Flags:
 	tmpl.UseYara = *flagYara
 	tmpl.YaraRulesPath = *flagYaraRules
 	tmpl.NoAutoUpdate = *flagNoUpdate
+	tmpl.NoCache = *flagNoCache
 	tmpl.CheckVersion = *flagVersion
 	tmpl.AnalyzeLogs = *flagLogs
 	tmpl.LogPaths = logPaths
@@ -247,7 +260,16 @@ Flags:
 		scanner.Init()
 
 		result := scanner.Scan()
+
+		if *flagCron {
+			os.Exit(runCronScan(result, sites[0].Path, *flagWebhook))
+		}
+
 		printReport(result, *flagJSON, *flagQuiet)
+
+		if *flagQuarantine {
+			quarantineFindings(result, sites[0].Path, *flagForce)
+		}
 
 		if *flagHTML != "" {
 			if err := writeHTMLReport(result, *flagHTML); err != nil {
@@ -295,7 +317,29 @@ Flags:
 
 	// Multi-site mode
 	multiResult := runMultiSiteScan(sites, tmpl)
+
+	if *flagCron {
+		exitCode := 0
+		for _, site := range multiResult.Sites {
+			if site.ScanResult == nil {
+				continue
+			}
+			if code := runCronScan(site.ScanResult, site.Path, *flagWebhook); code > exitCode {
+				exitCode = code
+			}
+		}
+		os.Exit(exitCode)
+	}
+
 	printMultiSiteReport(multiResult, *flagJSON)
+
+	if *flagQuarantine {
+		for _, site := range multiResult.Sites {
+			if site.ScanResult != nil {
+				quarantineFindings(site.ScanResult, site.Path, *flagForce)
+			}
+		}
+	}
 
 	if *flagHTML != "" {
 		writeMultiSiteHTML(multiResult, *flagHTML)

@@ -297,13 +297,37 @@ func detectMagentoExtensions(root string, verbose bool) []PluginInfo {
 	}
 
 	// Method 2: app/code (local modules)
+	// M2 layout: app/code/Vendor/Module
+	// M1 layout: app/code/{community,local}/Vendor/Module
 	appCode := filepath.Join(root, "app", "code")
 	if entries, err := os.ReadDir(appCode); err == nil {
 		for _, vendor := range entries {
-			if !vendor.IsDir() || vendor.Name() == "Magento" {
+			if !vendor.IsDir() || vendor.Name() == "Magento" || vendor.Name() == "core" {
 				continue
 			}
 			vendorDir := filepath.Join(appCode, vendor.Name())
+			if vendor.Name() == "community" || vendor.Name() == "local" {
+				m1Vendors, _ := os.ReadDir(vendorDir)
+				for _, v := range m1Vendors {
+					if !v.IsDir() {
+						continue
+					}
+					m1Modules, _ := os.ReadDir(filepath.Join(vendorDir, v.Name()))
+					for _, mod := range m1Modules {
+						if !mod.IsDir() {
+							continue
+						}
+						modPath := filepath.Join(vendorDir, v.Name(), mod.Name())
+						plugins = append(plugins, PluginInfo{
+							Name: v.Name() + "/" + mod.Name(), Type: "module",
+							Version: extractMagentoModuleVersion(modPath),
+							Path:    filepath.Join("app", "code", vendor.Name(), v.Name(), mod.Name()),
+							Active:  true,
+						})
+					}
+				}
+				continue
+			}
 			modules, _ := os.ReadDir(vendorDir)
 			for _, mod := range modules {
 				if !mod.IsDir() {
