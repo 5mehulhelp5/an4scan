@@ -345,6 +345,27 @@ if [ $? -eq 2 ]; then
 fi
 ```
 
+## Coverage & Limitations
+
+### What it detects
+- **Malware in files**: webshells/backdoors, Magecart skimmers, obfuscated code (base64/eval, hex, zero-width Unicode), droppers — ~120 native signatures + CMS-specific sets, with confidence levels (confirmed / likely / heuristic)
+- **Beyond files**: database injections (cms_block, core_config_data, rogue admins, crons), malicious processes (reverse shells, miners, rootkits, C2 connections), access-log exploit attempts, core file integrity, known CVEs (Magento patch-level aware), vulnerable extensions (Sansec magevulndb)
+- **YARA**: built-in rules + community rulesets via an embedded pure-Go engine (full rulesets when the `yara` binary is installed)
+
+### What it does NOT do
+- **No automatic cleanup/disinfection** — it quarantines confirmed malware (`--quarantine`) but does not repair infected files
+- **No real-time protection** — it's an on-demand/cron scanner, not a WAF or live monitor
+- **No behavioral/sandbox analysis** — static analysis only
+- **Partial YARA coverage without the `yara` binary** — the embedded engine loads ~450 of ~1800 rule files; large generic webshell/APT rulesets need `apt install yara`
+- **Magento, WordPress, PrestaShop only** — no Drupal, Joomla, Shopware, etc.
+
+### How it compares to eComscan (Sansec)
+eComscan is the commercial reference for **recent Magento skimmers** — its proprietary signature feed is updated daily from live detection across thousands of stores. an4scan can't match the freshness of that feed for cutting-edge skimmers.
+
+In exchange, an4scan is **free, open, and broader in surface**: it also scans system processes, network connections, access logs, multiple CMSes, and adds CVE/extension-vuln checks plus cron/quarantine automation — areas eComscan covers little or not at all.
+
+Rough guidance (estimate, not a measured benchmark): on a typical compromise with known threats, an4scan finds most of what eComscan would; on a freshly-deployed, heavily obfuscated skimmer, eComscan's live signature base has a clear edge. Use an4scan as a broad first-line scanner across the fleet, and eComscan to deep-dive a suspected recent Magento skimmer.
+
 ## License
 
 MIT
