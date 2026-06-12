@@ -59,6 +59,7 @@ type An4Scanner struct {
 	SaveScan         bool
 	showProgress     bool
 	cms              CMSInfo
+	whitelistMerged  []string
 
 	compiledSigs      []compiledSig
 	compiledFilenames []compiledFilenameSig
@@ -77,8 +78,16 @@ func (s *An4Scanner) Init() {
 	s.showProgress = !s.JSONOutput && !s.Quiet
 	// Detect CMS first
 	s.cms = detectCMS(s.Path)
-	// Add CMS-specific whitelist paths
-	s.Whitelist = append(s.Whitelist, getWhitelistForCMS(s.cms.Type)...)
+	// Merge all whitelist sources once (built-in + user + CMS-specific)
+	s.whitelistMerged = make([]string, 0, len(WhitelistPaths)+len(s.Whitelist)+8)
+	s.whitelistMerged = append(s.whitelistMerged, WhitelistPaths...)
+	s.whitelistMerged = append(s.whitelistMerged, s.Whitelist...)
+	s.whitelistMerged = append(s.whitelistMerged, getWhitelistForCMS(s.cms.Type)...)
+	// Compile multi-line patterns here (single-threaded) to avoid a data race
+	// when worker goroutines would otherwise lazily initialize the global.
+	if len(multiLinePatterns) == 0 {
+		multiLinePatterns = initMultiLinePatterns()
+	}
 	s.compileSigs()
 	s.compileFilenames()
 }
@@ -147,12 +156,7 @@ func (s *An4Scanner) shouldSkipDir(name string) bool {
 }
 
 func (s *An4Scanner) isWhitelisted(relPath string) bool {
-	// Check against all whitelist paths (both built-in and user-provided)
-	allWL := append(WhitelistPaths, s.Whitelist...)
-	// Also add CMS-specific whitelist
-	allWL = append(allWL, getWhitelistForCMS(s.cms.Type)...)
-
-	for _, wp := range allWL {
+	for _, wp := range s.whitelistMerged {
 		// Direct prefix match (standard case: scan root = CMS root)
 		if strings.HasPrefix(relPath, wp) {
 			return true
@@ -886,13 +890,9 @@ func sortFindings(f []Finding) {
 }
 
 func sortSuspicious(s []SuspiciousFile) {
-	for i := 0; i < len(s); i++ {
-		for j := i + 1; j < len(s); j++ {
-			if severityOrder[s[i].Severity] > severityOrder[s[j].Severity] {
-				s[i], s[j] = s[j], s[i]
-			}
-		}
-	}
+	sort.SliceStable(s, func(i, j int) bool {
+		return severityOrder[s[i].Severity] < severityOrder[s[j].Severity]
+	})
 }
 
 func buildSummary(result *ScanResult) ScanSummary {

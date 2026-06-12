@@ -59,20 +59,7 @@ func (ds *DatabaseScanner) readLocalXML() map[string]string {
 	config["dbname"] = extract("dbname")
 	config["username"] = extract("username")
 	config["password"] = extract("password")
-
-	prefixRe := regexp.MustCompile(`<table_prefix><!\[CDATA\[([^\]]*)\]\]></table_prefix>`)
-	pm := prefixRe.FindStringSubmatch(content)
-	if pm != nil {
-		config["table_prefix"] = pm[1]
-	} else {
-		prefixRe2 := regexp.MustCompile(`<table_prefix>([^<]*)</table_prefix>`)
-		pm2 := prefixRe2.FindStringSubmatch(content)
-		if pm2 != nil {
-			config["table_prefix"] = pm2[1]
-		} else {
-			config["table_prefix"] = ""
-		}
-	}
+	config["table_prefix"] = extract("table_prefix")
 
 	if config["dbname"] == "" {
 		return nil

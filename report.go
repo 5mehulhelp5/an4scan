@@ -252,15 +252,6 @@ func printYaraEngineHint() {
 	fmt.Printf("  %s  an4scan uses its built-in engine otherwise (built-in + Magento/Sansec rules only).%s\n\n", Dim, Reset)
 }
 
-func hasModuleFindings(modules map[string]int) bool {
-	for _, v := range modules {
-		if v > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 // printGroupedTimeline groups timeline events by day, collapsing repetitive entries.
 func printGroupedTimeline(events []TimelineEvent) {
 	typeIcons := map[string]string{

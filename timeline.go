@@ -9,10 +9,10 @@ import (
 )
 
 var (
+	// A bare datetime already matches inside "Modified: ..." / "Created: ..."
+	// strings, so one pattern is enough.
 	tsPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})`),
-		regexp.MustCompile(`Modified:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})`),
-		regexp.MustCompile(`Created:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})`),
 	}
 	logTsPattern = regexp.MustCompile(`\[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2})`)
 )

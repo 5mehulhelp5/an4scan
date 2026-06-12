@@ -121,25 +121,14 @@ func runMultiSiteScan(sites []CMSSite, scanner *An4Scanner) *MultiSiteResult {
 			fmt.Printf("  %s\n\n", strings.Repeat("─", 50))
 		}
 
-		// Create a scanner for this site (quiet scan, we handle output)
-		s := NewScanner(site.Path)
-		s.Workers = scanner.Workers
-		s.MinSeverity = scanner.MinSeverity
-		s.Whitelist = scanner.Whitelist
-		s.JSONOutput = scanner.JSONOutput
-		s.Verbose = scanner.Verbose
+		// Copy the whole template scanner so every flag is carried over
+		// (field-by-field copying silently dropped flags in the past).
+		s := *scanner
+		s.Path = site.Path
 		s.Quiet = true // suppress individual scan output, we print reports ourselves
-		s.ScanDB = scanner.ScanDB
-		s.CheckMtime = scanner.CheckMtime
-		s.MtimeDays = scanner.MtimeDays
-		s.CheckPermissions = scanner.CheckPermissions
-		s.UseYara = scanner.UseYara
-		s.YaraRulesPath = scanner.YaraRulesPath
-		s.CheckVersion = scanner.CheckVersion
-		s.AnalyzeLogs = scanner.AnalyzeLogs
-		s.CheckPlugins = scanner.CheckPlugins
-		s.CheckIntegrity = scanner.CheckIntegrity
-		s.LogPaths = scanner.LogPaths
+		s.Whitelist = append([]string(nil), scanner.Whitelist...) // don't share backing array across sites
+		s.compiledSigs = nil
+		s.compiledFilenames = nil
 		s.Init()
 
 		scanResult := s.Scan()
@@ -191,13 +180,10 @@ func buildMultiSummary(result *MultiSiteResult) MultiSummary {
 		total := sr.TotalFindings + sr.TotalSuspiciousFiles
 		summary.TotalFindings += total
 
+		// sr.TotalFindings and sr.BySeverity already include plugin findings
+		// (see buildSummary), so don't add them again here.
 		for sev, count := range sr.BySeverity {
 			summary.BySeverity[sev] += count
-		}
-		// Add plugin findings
-		for _, pf := range site.ScanResult.PluginFindings {
-			summary.BySeverity[pf.Severity]++
-			summary.TotalFindings++
 		}
 
 		if sr.BySeverity[CRITICAL] > 0 {
