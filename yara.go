@@ -345,6 +345,11 @@ var unsupportedYaraMods = regexp.MustCompile(`(?i)\b(nocase|wide|xor|private|bas
 // honest reporting (the embedded engine supports only a subset of YARA).
 var yaraEngineInfo string
 
+// yaraEmbeddedUsed is true when the scan fell back to the embedded engine
+// because the external `yara` binary was not found — surfaced as a hint so
+// the operator can install it for full ruleset coverage.
+var yaraEmbeddedUsed bool
+
 func yaraScanner(root, extraRulesPath string, files []string, workers int, verbose bool) ([]Finding, bool) {
 	// Collect rule files
 	var ruleFiles []string
@@ -375,11 +380,13 @@ func yaraScanner(root, extraRulesPath string, files []string, workers int, verbo
 
 	// Full-fidelity path: external yara binary, if installed
 	if yaraBin, err := exec.LookPath("yara"); err == nil {
+		yaraEmbeddedUsed = false
 		if verbose {
 			fmt.Fprintln(os.Stderr, "  [YARA] using external yara binary (full fidelity)")
 		}
 		return yaraScanExternal(yaraBin, root, ruleFiles, files, verbose)
 	}
+	yaraEmbeddedUsed = true
 
 	// Parse + validate each source, merge valid rules (dedupe by name)
 	p := parser.New()

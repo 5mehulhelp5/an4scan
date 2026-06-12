@@ -61,6 +61,7 @@ func printTextReport(result *ScanResult) {
 
 	if total == 0 {
 		fmt.Printf("  \033[92m✓ No threats detected%s\n\n", Reset)
+		printYaraEngineHint()
 		return
 	}
 
@@ -154,6 +155,18 @@ func printTextReport(result *ScanResult) {
 	} else {
 		fmt.Println()
 	}
+
+	printYaraEngineHint()
+}
+
+// printYaraEngineHint warns when YARA ran on the embedded engine (partial
+// ruleset coverage) and tells the operator how to get full coverage.
+func printYaraEngineHint() {
+	if !yaraEmbeddedUsed {
+		return
+	}
+	fmt.Printf("  %sℹ For full YARA coverage, install the 'yara' binary (e.g. apt install yara).%s\n", Dim, Reset)
+	fmt.Printf("  %s  an4scan uses its built-in engine otherwise (built-in + Magento/Sansec rules only).%s\n\n", Dim, Reset)
 }
 
 func hasModuleFindings(modules map[string]int) bool {

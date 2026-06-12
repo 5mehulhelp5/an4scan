@@ -280,6 +280,8 @@ func printMultiSiteReport(result *MultiSiteResult, jsonOutput bool) {
 		}
 		fmt.Println()
 	}
+
+	printYaraEngineHint()
 }
 
 func printMultiSiteJSON(result *MultiSiteResult) {
