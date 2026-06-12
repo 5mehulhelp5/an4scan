@@ -126,6 +126,8 @@ Malware findings carry a confidence level, and the report sorts by it within eac
 
 The timeline uses matching wording: "Malware detected" only for confirmed findings, "Suspicious pattern" for heuristics.
 
+When confirmed threats are present, the report opens with a dedicated **CONFIRMED THREAT(S)** block listing them (one line per file) before the severity breakdown — so genuine malware is never buried under heuristic or factual findings of higher nominal severity.
+
 ## Scheduled Scans (cron mode)
 
 ```bash

@@ -74,6 +74,9 @@ func printTextReport(result *ScanResult) {
 	}
 	fmt.Println()
 
+	// Confirmed threats — the highest-signal block, shown first
+	printConfirmedThreats(result)
+
 	// Suspicious files (grouped)
 	if len(result.SuspiciousFiles) > 0 {
 		fmt.Printf("\n%s  SUSPICIOUS FILES%s\n", Bold, Reset)
@@ -177,6 +180,46 @@ func printLogScanHint(result *ScanResult) {
 		Bold, severityColors[HIGH], files, Reset)
 	fmt.Printf("  %s  for the entry vector, upload time, and attacker IPs (off by default; can be slow).%s\n\n",
 		Dim, Reset)
+}
+
+// printConfirmedThreats surfaces confirmed-confidence malware at the very top
+// of the report, one line per file, so genuine threats aren't buried under
+// heuristic/factual findings of higher nominal severity.
+func printConfirmedThreats(result *ScanResult) {
+	// One entry per file; keep the first confirmed finding's description.
+	type threat struct {
+		file, sig, desc string
+	}
+	var threats []threat
+	seen := make(map[string]bool)
+
+	all := append([]Finding{}, result.Findings...)
+	all = append(all, result.YaraFindings...)
+	all = append(all, result.ProcessFindings...)
+	all = append(all, result.DBFindings...)
+	for _, f := range all {
+		if f.Confidence != ConfidenceConfirmed || seen[f.FilePath] {
+			continue
+		}
+		seen[f.FilePath] = true
+		threats = append(threats, threat{f.FilePath, f.SignatureID, f.Description})
+	}
+
+	if len(threats) == 0 {
+		return
+	}
+
+	red := severityColors[CRITICAL]
+	label := fmt.Sprintf("  ⚠  %d CONFIRMED THREAT(S) — immediate action needed  ", len(threats))
+	bar := strings.Repeat("━", len([]rune(label)))
+	fmt.Printf("\n%s%s%s\n", red+Bold, bar, Reset)
+	fmt.Printf("%s%s%s\n", red+Bold, label, Reset)
+	fmt.Printf("%s%s%s\n", red+Bold, bar, Reset)
+
+	for _, t := range threats {
+		fmt.Printf("  %s●%s %s%s%s\n", red, Reset, Bold, t.file, Reset)
+		fmt.Printf("      %s%s %s[%s]%s\n", Dim, t.desc, Dim, t.sig, Reset)
+	}
 }
 
 // suspiciousFileCount returns the number of distinct files with confirmed or
